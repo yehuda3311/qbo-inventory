@@ -108,7 +108,7 @@ export const qboService = {
   },
 
   async getItems(stored) {
-    const query = encodeURIComponent("SELECT * FROM Item WHERE Type='Inventory' MAXRESULTS 200");
+    const query = encodeURIComponent("SELECT * FROM Item MAXRESULTS 200");
     return this.apiCall(stored, "GET", `/query?query=${query}`);
   },
 };
