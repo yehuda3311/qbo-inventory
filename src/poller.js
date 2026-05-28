@@ -5,9 +5,11 @@ import { loadTokens } from "./routes/auth.js";
 const POLL_INTERVAL_MS = 30 * 1000;
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
-// Store start time as a simple date string QBO can compare
-const SERVER_START_DATE = new Date().toISOString().split('T')[0]; // just YYYY-MM-DD
-console.log(`[Poller] Will only process invoices created on or after: ${SERVER_START_DATE}`);
+const SERVER_START_DATE = new Date().toISOString().split('T')[0];
+console.log(`[Poller] Will only process invoices from: ${SERVER_START_DATE}`);
+
+// In-memory set to prevent double-deducting within the same session
+const sessionProcessed = new Set();
 
 async function getProcessedInvoices() {
   try {
@@ -17,30 +19,30 @@ async function getProcessedInvoices() {
       headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
     });
     const data = await r.json();
-    return new Set(data?.processedInvoices || []);
-  } catch { return new Set(); }
+    const stored = new Set(data?.processedInvoices || []);
+    // Merge with in-memory set
+    for (const id of sessionProcessed) stored.add(id);
+    return { stored: data, processedSet: stored };
+  } catch { return { stored: null, processedSet: new Set(sessionProcessed) }; }
 }
 
-async function saveProcessedInvoice(invoiceId) {
+async function saveProcessedInvoices(storedData, newIds) {
   try {
     const binId = process.env.JSONBIN_BIN_ID;
     const apiKey = process.env.JSONBIN_API_KEY;
-    const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
-      headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
-    });
-    const data = await r.json();
-    const processed = data?.processedInvoices || [];
-    if (!processed.includes(invoiceId)) {
-      processed.push(invoiceId);
-      if (processed.length > 1000) processed.splice(0, processed.length - 1000);
-      data.processedInvoices = processed;
-      await fetch(`${JSONBIN_API}/b/${binId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
-        body: JSON.stringify(data)
-      });
+    const processed = storedData?.processedInvoices || [];
+    for (const id of newIds) {
+      if (!processed.includes(id)) processed.push(id);
+      sessionProcessed.add(id);
     }
-  } catch (e) { console.error("[Poller] Error saving processed invoice:", e); }
+    if (processed.length > 1000) processed.splice(0, processed.length - 1000);
+    storedData.processedInvoices = processed;
+    await fetch(`${JSONBIN_API}/b/${binId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
+      body: JSON.stringify(storedData)
+    });
+  } catch (e) { console.error("[Poller] Error saving processed invoices:", e.message); }
 }
 
 async function pollPaidInvoices() {
@@ -52,24 +54,30 @@ async function pollPaidInvoices() {
       return;
     }
 
-    // Query by TxnDate (transaction date) which is just YYYY-MM-DD — simple and reliable
     const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND TxnDate >= '${SERVER_START_DATE}'`);
     const invoices = data?.QueryResponse?.Invoice || [];
     console.log(`[Poller] Found ${invoices.length} paid invoices for today`);
-
     if (!invoices.length) return;
 
-    const processed = await getProcessedInvoices();
+    const { stored: binData, processedSet } = await getProcessedInvoices();
+
+    // Filter to only new unprocessed invoices
+    const newInvoices = invoices.filter(inv => !processedSet.has(inv.Id));
+    if (!newInvoices.length) {
+      console.log(`[Poller] All already processed`);
+      return;
+    }
+
+    console.log(`[Poller] ${newInvoices.length} new invoice(s) to process`);
+
+    // Mark all as processed in memory immediately to prevent race conditions
+    for (const inv of newInvoices) sessionProcessed.add(inv.Id);
+
+    const newIds = [];
     let deducted = 0;
 
-    for (const inv of invoices) {
-      if (processed.has(inv.Id)) {
-        console.log(`[Poller] Skipping already-processed invoice ${inv.DocNumber}`);
-        continue;
-      }
-
-      console.log(`[Poller] NEW: Invoice ${inv.DocNumber} (ID: ${inv.Id}) — deducting`);
-
+    for (const inv of newInvoices) {
+      console.log(`[Poller] Processing invoice ${inv.DocNumber} (ID: ${inv.Id})`);
       const lines = (inv.Line || [])
         .filter(l => l.DetailType === "SalesItemLineDetail")
         .map(l => ({
@@ -79,20 +87,21 @@ async function pollPaidInvoices() {
         }))
         .filter(l => l.itemId && l.qty > 0);
 
-      if (!lines.length) {
-        await saveProcessedInvoice(inv.Id);
-        continue;
-      }
+      newIds.push(inv.Id);
+
+      if (!lines.length) continue;
 
       const result = await jsonbinService.deductSoldItems(lines);
       console.log(`[Poller] Deducted:`, JSON.stringify(result.updated));
-      await saveProcessedInvoice(inv.Id);
       deducted++;
     }
 
-    if (deducted > 0) {
-      console.log(`[Poller] Done — ${deducted} new invoice(s) processed`);
+    // Save all processed IDs in one single write
+    if (newIds.length && binData) {
+      await saveProcessedInvoices(binData, newIds);
     }
+
+    console.log(`[Poller] Done — ${deducted} invoice(s) deducted`);
   } catch (err) {
     console.error("[Poller] Error:", err.message);
   }
