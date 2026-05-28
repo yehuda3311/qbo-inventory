@@ -7,29 +7,42 @@ function getBinConfig() {
 }
 
 export const jsonbinService = {
-  // Get raw data (no record wrapper)
   async getRawData() {
     const { binId, apiKey, baseUrl } = getBinConfig();
-    const res = await fetch(`${baseUrl}/b/${binId}/latest`, {
-      headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" },
+    // Add cache-busting timestamp to prevent stale reads
+    const ts = Date.now();
+    const res = await fetch(`${baseUrl}/b/${binId}?t=${ts}`, {
+      headers: { 
+        "X-Master-Key": apiKey, 
+        "X-Bin-Meta": "false",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache"
+      },
+      cache: "no-store"
     });
     if (!res.ok) throw new Error(`JSONBin read failed: ${res.status}`);
     const data = await res.json();
-    console.log("[JSONBin] Raw response top-level keys:", Object.keys(data));
+    const qty = data?.state?.kratom?.products?.find(p => p.qboItemId === "1010000301")?.qty;
+    console.log(`[JSONBin] Read qty for 1 Gallon Kratom Extract: ${qty}`);
     return data;
   },
 
-  // Write raw data back
   async writeRawData(data) {
     const { binId, apiKey, baseUrl } = getBinConfig();
     const res = await fetch(`${baseUrl}/b/${binId}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
+      headers: { 
+        "Content-Type": "application/json", 
+        "X-Master-Key": apiKey,
+        "Cache-Control": "no-cache"
+      },
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`JSONBin write failed: ${res.status}`);
-    console.log("[JSONBin] Write response status:", res.status);
-    return res.json();
+    const result = await res.json();
+    const qty = result?.record?.state?.kratom?.products?.find(p => p.qboItemId === "1010000301")?.qty;
+    console.log(`[JSONBin] Write confirmed qty: ${qty}`);
+    return result;
   },
 
   async getInventory() {
@@ -42,13 +55,6 @@ export const jsonbinService = {
 
   async deductSoldItems(invoiceLines) {
     const data = await this.getRawData();
-    
-    // The data IS the record directly when X-Bin-Meta: false
-    // state should be at data.state
-    console.log("[JSONBin] Keys:", Object.keys(data));
-    console.log("[JSONBin] Has state:", !!data?.state);
-    console.log("[JSONBin] kratom products count:", data?.state?.kratom?.products?.length);
-    
     const updated = [];
     const notFound = [];
     const brands = ["kratom", "kava", "kratomyx", "kavana"];
@@ -63,7 +69,6 @@ export const jsonbinService = {
             p.qboItemId === String(line.itemId) ||
             (p.name && p.name.toLowerCase() === (line.itemName || "").toLowerCase())
         );
-
         if (product) {
           const prevQty = product.qty || 0;
           product.qty = Math.max(0, prevQty - line.qty);
@@ -77,13 +82,7 @@ export const jsonbinService = {
     }
 
     data.lastSyncedAt = new Date().toISOString();
-    
-    // Verify the change is in the data before writing
-    const checkProd = data?.state?.kratom?.products?.find(p => p.qboItemId === invoiceLines[0]?.itemId);
-    console.log("[JSONBin] Pre-write check qty:", checkProd?.qty);
-    
-    const writeResult = await this.writeRawData(data);
-    console.log("[JSONBin] Write result:", JSON.stringify(writeResult).slice(0, 100));
+    await this.writeRawData(data);
 
     return { updated, notFound, newInventory: data };
   },
