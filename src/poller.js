@@ -3,7 +3,7 @@ import { jsonbinService } from "./services/jsonbin.js";
 import { loadTokens } from "./routes/auth.js";
 
 const POLL_INTERVAL_MS = 30 * 1000; // every 30 seconds
-const LOOKBACK_MS = 15 * 60 * 1000; // look back 15 minutes
+const LOOKBACK_MS = 24 * 60 * 60 * 1000; // look back 15 minutes
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
 async function getProcessedInvoices() {
