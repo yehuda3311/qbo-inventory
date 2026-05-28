@@ -7,37 +7,48 @@ function getBinConfig() {
 }
 
 export const jsonbinService = {
-  async getInventory() {
+  // Get raw data (no record wrapper)
+  async getRawData() {
     const { binId, apiKey, baseUrl } = getBinConfig();
     const res = await fetch(`${baseUrl}/b/${binId}/latest`, {
       headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" },
     });
     if (!res.ok) throw new Error(`JSONBin read failed: ${res.status}`);
-    return res.json(); // Returns the raw record (no wrapper when X-Bin-Meta: false)
+    const data = await res.json();
+    console.log("[JSONBin] Raw response top-level keys:", Object.keys(data));
+    return data;
   },
 
-  async updateInventory(inventoryData) {
+  // Write raw data back
+  async writeRawData(data) {
     const { binId, apiKey, baseUrl } = getBinConfig();
     const res = await fetch(`${baseUrl}/b/${binId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
-      body: JSON.stringify(inventoryData),
+      body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error(`JSONBin write failed: ${res.status}`);
+    console.log("[JSONBin] Write response status:", res.status);
     return res.json();
   },
 
-  async deductSoldItems(invoiceLines) {
-    const raw = await this.getInventory();
-    
-    // JSONBin returns { record: {...} } even with X-Bin-Meta: false in some cases
-    // Handle both formats
-    const inventory = raw?.record ? raw.record : raw;
-    
-    console.log("[JSONBin] Data structure keys:", Object.keys(inventory));
-    console.log("[JSONBin] Has state:", !!inventory?.state);
-    console.log("[JSONBin] State keys:", inventory?.state ? Object.keys(inventory.state) : "none");
+  async getInventory() {
+    return this.getRawData();
+  },
 
+  async updateInventory(data) {
+    return this.writeRawData(data);
+  },
+
+  async deductSoldItems(invoiceLines) {
+    const data = await this.getRawData();
+    
+    // The data IS the record directly when X-Bin-Meta: false
+    // state should be at data.state
+    console.log("[JSONBin] Keys:", Object.keys(data));
+    console.log("[JSONBin] Has state:", !!data?.state);
+    console.log("[JSONBin] kratom products count:", data?.state?.kratom?.products?.length);
+    
     const updated = [];
     const notFound = [];
     const brands = ["kratom", "kava", "kratomyx", "kavana"];
@@ -45,7 +56,7 @@ export const jsonbinService = {
     for (const line of invoiceLines) {
       let matched = false;
       for (const brand of brands) {
-        const products = inventory?.state?.[brand]?.products || [];
+        const products = data?.state?.[brand]?.products || [];
         const product = products.find(
           (p) =>
             p.qboItemId === line.itemId ||
@@ -56,14 +67,8 @@ export const jsonbinService = {
         if (product) {
           const prevQty = product.qty || 0;
           product.qty = Math.max(0, prevQty - line.qty);
-          updated.push({
-            name: product.name,
-            brand,
-            qboItemId: line.itemId,
-            prevQty,
-            deducted: line.qty,
-            newQty: product.qty,
-          });
+          console.log(`[JSONBin] Deducting ${line.qty} from ${product.name}: ${prevQty} -> ${product.qty}`);
+          updated.push({ name: product.name, brand, qboItemId: line.itemId, prevQty, deducted: line.qty, newQty: product.qty });
           matched = true;
           break;
         }
@@ -71,14 +76,15 @@ export const jsonbinService = {
       if (!matched) notFound.push(line);
     }
 
-    inventory.lastSyncedAt = new Date().toISOString();
+    data.lastSyncedAt = new Date().toISOString();
     
-    // Write back — if original had record wrapper, preserve full structure
-    const toWrite = raw?.record ? { ...raw, record: inventory } : inventory;
-    await this.updateInventory(toWrite);
+    // Verify the change is in the data before writing
+    const checkProd = data?.state?.kratom?.products?.find(p => p.qboItemId === invoiceLines[0]?.itemId);
+    console.log("[JSONBin] Pre-write check qty:", checkProd?.qty);
+    
+    const writeResult = await this.writeRawData(data);
+    console.log("[JSONBin] Write result:", JSON.stringify(writeResult).slice(0, 100));
 
-    console.log("[JSONBin] Written back. Updated:", JSON.stringify(updated));
-
-    return { updated, notFound, newInventory: inventory };
+    return { updated, notFound, newInventory: data };
   },
 };
