@@ -1,21 +1,40 @@
 import { Router } from "express";
 import { qboService } from "../services/qbo.js";
-import { writeFile, readFile } from "fs/promises";
-import { existsSync } from "fs";
 
 export const authRouter = Router();
 
-const TOKEN_FILE = "/tmp/qbo_tokens.json";
+const JSONBIN_API = "https://api.jsonbin.io/v3";
 
 async function saveTokens(tokens, realmId) {
-  await writeFile(TOKEN_FILE, JSON.stringify({ qboTokens: tokens, realmId }));
+  const binId = process.env.JSONBIN_BIN_ID;
+  const apiKey = process.env.JSONBIN_API_KEY;
+  
+  // Read current bin data first
+  const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
+    headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
+  });
+  const current = await r.json();
+  
+  // Merge tokens into existing data
+  const updated = { ...current, qboTokens: tokens, realmId };
+  
+  await fetch(`${JSONBIN_API}/b/${binId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
+    body: JSON.stringify(updated)
+  });
 }
 
-async function loadTokens() {
+export async function loadTokens() {
+  const binId = process.env.JSONBIN_BIN_ID;
+  const apiKey = process.env.JSONBIN_API_KEY;
   try {
-    if (!existsSync(TOKEN_FILE)) return null;
-    const raw = await readFile(TOKEN_FILE, "utf8");
-    return JSON.parse(raw);
+    const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
+      headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
+    });
+    const data = await r.json();
+    if (!data?.qboTokens) return null;
+    return { qboTokens: data.qboTokens, realmId: data.realmId };
   } catch { return null; }
 }
 
@@ -25,7 +44,7 @@ authRouter.get("/connect", (req, res) => {
 
   if (!clientId || !redirectUri) {
     return res.status(500).json({
-      error: "Missing QBO_CLIENT_ID or QBO_REDIRECT_URI",
+      error: "Missing env vars",
       clientId: clientId ? "set" : "MISSING",
       redirectUri: redirectUri ? "set" : "MISSING"
     });
@@ -80,7 +99,21 @@ authRouter.get("/status", async (req, res) => {
 });
 
 authRouter.get("/disconnect", async (req, res) => {
-  try { await writeFile(TOKEN_FILE, JSON.stringify({})); } catch {}
+  try {
+    const binId = process.env.JSONBIN_BIN_ID;
+    const apiKey = process.env.JSONBIN_API_KEY;
+    const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
+      headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
+    });
+    const current = await r.json();
+    delete current.qboTokens;
+    delete current.realmId;
+    await fetch(`${JSONBIN_API}/b/${binId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
+      body: JSON.stringify(current)
+    });
+  } catch {}
   res.json({ success: true, message: "Disconnected from QuickBooks" });
 });
 
@@ -90,7 +123,7 @@ authRouter.get("/debug", (req, res) => {
     QBO_CLIENT_SECRET: process.env.QBO_CLIENT_SECRET ? "SET ✓" : "MISSING ✗",
     QBO_REDIRECT_URI: process.env.QBO_REDIRECT_URI || "MISSING ✗",
     QBO_ENVIRONMENT: process.env.QBO_ENVIRONMENT || "MISSING ✗",
+    JSONBIN_BIN_ID: process.env.JSONBIN_BIN_ID ? "SET ✓" : "MISSING ✗",
+    JSONBIN_API_KEY: process.env.JSONBIN_API_KEY ? "SET ✓" : "MISSING ✗",
   });
 });
-
-export { loadTokens };
