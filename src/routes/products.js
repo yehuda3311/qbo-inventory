@@ -7,7 +7,7 @@ export const productsRouter = Router();
 
 const VALID_CATS = ["Bulk Bags","100mg Stickpacks","200mg Stickpacks","Gallons","Shots"];
 
-// Debug — see raw QBO response
+// Debug — see raw QBO items
 productsRouter.get("/qbo-debug", async (req, res) => {
   const stored = await loadTokens();
   if (!stored?.qboTokens) {
@@ -15,6 +15,20 @@ productsRouter.get("/qbo-debug", async (req, res) => {
   }
   try {
     const data = await qboService.getItems(stored);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Debug — see raw invoice
+productsRouter.get("/invoice-debug/:id", async (req, res) => {
+  const stored = await loadTokens();
+  if (!stored?.qboTokens) {
+    return res.status(401).json({ error: "Not connected to QuickBooks" });
+  }
+  try {
+    const data = await qboService.getInvoice(stored, req.params.id);
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
