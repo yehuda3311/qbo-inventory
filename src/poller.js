@@ -5,9 +5,8 @@ import { loadTokens } from "./routes/auth.js";
 const POLL_INTERVAL_MS = 30 * 1000;
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
-// Record the exact time the server started — only process invoices paid AFTER this
 const SERVER_START_TIME = new Date().toISOString().replace(/\.\d{3}Z$/, '');
-console.log(`[Poller] Will only process invoices paid after: ${SERVER_START_TIME}`);
+console.log(`[Poller] Will only process invoices created/paid after: ${SERVER_START_TIME}`);
 
 async function getProcessedInvoices() {
   try {
@@ -52,8 +51,8 @@ async function pollPaidInvoices() {
       return;
     }
 
-    // Only look at invoices updated since server started
-    const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.LastUpdatedTime > '${SERVER_START_TIME}'`);
+    // Query by CreateTime so we catch $0 invoices that are paid at creation
+    const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.CreateTime > '${SERVER_START_TIME}'`);
     const invoices = data?.QueryResponse?.Invoice || [];
     console.log(`[Poller] Found ${invoices.length} paid invoices since server start`);
 
