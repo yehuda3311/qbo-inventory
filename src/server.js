@@ -4,15 +4,10 @@ import { authRouter } from "./routes/auth.js";
 import { webhookRouter } from "./routes/webhook.js";
 import { inventoryRouter } from "./routes/inventory.js";
 import { productsRouter } from "./routes/products.js";
+import { startPoller } from "./poller.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Log every incoming request before anything else
-app.use((req, res, next) => {
-  console.log(`>>> ${new Date().toISOString()} ${req.method} ${req.url}`);
-  next();
-});
 
 // CORS
 app.use((req, res, next) => {
@@ -23,15 +18,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Parse JSON for all routes EXCEPT /webhook/qbo
-app.use((req, res, next) => {
-  if (req.path === "/webhook/qbo") return next();
-  express.json()(req, res, next);
-});
-app.use((req, res, next) => {
-  if (req.path === "/webhook/qbo") return next();
-  express.urlencoded({ extended: true })(req, res, next);
-});
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || "change-me-in-production",
@@ -51,4 +39,6 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
+  // Start polling for paid invoices every 5 minutes
+  startPoller();
 });
