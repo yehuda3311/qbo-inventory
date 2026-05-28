@@ -2,8 +2,8 @@ import { qboService } from "./services/qbo.js";
 import { jsonbinService } from "./services/jsonbin.js";
 import { loadTokens } from "./routes/auth.js";
 
-const POLL_INTERVAL_MS = 30 * 1000; // every 30 seconds
-const LOOKBACK_MS = 24 * 60 * 60 * 1000; // look back 15 minutes
+const POLL_INTERVAL_MS = 30 * 1000;
+const LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
 async function getProcessedInvoices() {
@@ -37,10 +37,11 @@ async function saveProcessedInvoice(invoiceId) {
         body: JSON.stringify(data)
       });
     }
-  } catch (e) { console.error("Error saving processed invoice:", e); }
+  } catch (e) { console.error("[Poller] Error saving processed invoice:", e); }
 }
 
 async function pollPaidInvoices() {
+  console.log(`[Poller] ${new Date().toISOString()} checking...`);
   try {
     const stored = await loadTokens();
     if (!stored?.qboTokens) {
@@ -49,18 +50,25 @@ async function pollPaidInvoices() {
     }
 
     const since = new Date(Date.now() - LOOKBACK_MS).toISOString().replace(/\.\d{3}Z$/, '');
+    console.log(`[Poller] Querying invoices since ${since}`);
+    
     const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.LastUpdatedTime > '${since}'`);
     const invoices = data?.QueryResponse?.Invoice || [];
+    console.log(`[Poller] Found ${invoices.length} paid invoices`);
 
     if (!invoices.length) return;
 
     const processed = await getProcessedInvoices();
+    console.log(`[Poller] Already processed: ${processed.size}`);
     let deducted = 0;
 
     for (const inv of invoices) {
-      if (processed.has(inv.Id)) continue;
+      if (processed.has(inv.Id)) {
+        console.log(`[Poller] Skipping already-processed invoice ${inv.DocNumber}`);
+        continue;
+      }
 
-      console.log(`[Poller] New paid invoice ${inv.DocNumber} (ID: ${inv.Id}) — deducting inventory`);
+      console.log(`[Poller] NEW: Invoice ${inv.DocNumber} (ID: ${inv.Id}) — deducting`);
 
       const lines = (inv.Line || [])
         .filter(l => l.DetailType === "SalesItemLineDetail")
@@ -82,9 +90,7 @@ async function pollPaidInvoices() {
       deducted++;
     }
 
-    if (deducted > 0) {
-      console.log(`[Poller] ${deducted} invoice(s) processed`);
-    }
+    console.log(`[Poller] Done — ${deducted} new invoices processed`);
   } catch (err) {
     console.error("[Poller] Error:", err.message);
   }
