@@ -8,7 +8,7 @@ import { productsRouter } from "./routes/products.js";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS — allow requests from any local HTML file or browser
+// CORS
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -17,8 +17,15 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Parse JSON for all routes EXCEPT /webhook/qbo (needs raw body)
+app.use((req, res, next) => {
+  if (req.path === "/webhook/qbo") return next();
+  express.json()(req, res, next);
+});
+app.use((req, res, next) => {
+  if (req.path === "/webhook/qbo") return next();
+  express.urlencoded({ extended: true })(req, res, next);
+});
 
 app.use(session({
   secret: process.env.SESSION_SECRET || "change-me-in-production",
