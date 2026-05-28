@@ -2,7 +2,8 @@ import { qboService } from "./services/qbo.js";
 import { jsonbinService } from "./services/jsonbin.js";
 import { loadTokens } from "./routes/auth.js";
 
-const POLL_INTERVAL_MS = 5 * 60 * 1000;
+const POLL_INTERVAL_MS = 30 * 1000; // every 30 seconds
+const LOOKBACK_MS = 15 * 60 * 1000; // look back 15 minutes
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
 async function getProcessedInvoices() {
@@ -40,7 +41,6 @@ async function saveProcessedInvoice(invoiceId) {
 }
 
 async function pollPaidInvoices() {
-  console.log(`[Poller] ${new Date().toISOString()} — checking for paid invoices...`);
   try {
     const stored = await loadTokens();
     if (!stored?.qboTokens) {
@@ -48,28 +48,19 @@ async function pollPaidInvoices() {
       return;
     }
 
-    // QBO requires date in format: YYYY-MM-DDTHH:MM:SS
-    const sinceDate = new Date(Date.now() - 10 * 60 * 1000);
-    const since = sinceDate.toISOString().replace(/\.\d{3}Z$/, '');
-
+    const since = new Date(Date.now() - LOOKBACK_MS).toISOString().replace(/\.\d{3}Z$/, '');
     const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.LastUpdatedTime > '${since}'`);
     const invoices = data?.QueryResponse?.Invoice || [];
 
-    if (!invoices.length) {
-      console.log("[Poller] No newly paid invoices found");
-      return;
-    }
+    if (!invoices.length) return;
 
     const processed = await getProcessedInvoices();
     let deducted = 0;
 
     for (const inv of invoices) {
-      if (processed.has(inv.Id)) {
-        console.log(`[Poller] Invoice ${inv.DocNumber} already processed — skipping`);
-        continue;
-      }
+      if (processed.has(inv.Id)) continue;
 
-      console.log(`[Poller] Processing paid invoice ${inv.DocNumber} (ID: ${inv.Id})`);
+      console.log(`[Poller] New paid invoice ${inv.DocNumber} (ID: ${inv.Id}) — deducting inventory`);
 
       const lines = (inv.Line || [])
         .filter(l => l.DetailType === "SalesItemLineDetail")
@@ -80,22 +71,27 @@ async function pollPaidInvoices() {
         }))
         .filter(l => l.itemId && l.qty > 0);
 
-      if (!lines.length) continue;
+      if (!lines.length) {
+        await saveProcessedInvoice(inv.Id);
+        continue;
+      }
 
       const result = await jsonbinService.deductSoldItems(lines);
-      console.log(`[Poller] Deducted for invoice ${inv.DocNumber}:`, result.updated);
+      console.log(`[Poller] Deducted:`, JSON.stringify(result.updated));
       await saveProcessedInvoice(inv.Id);
       deducted++;
     }
 
-    console.log(`[Poller] Done — ${deducted} invoices deducted`);
+    if (deducted > 0) {
+      console.log(`[Poller] ${deducted} invoice(s) processed`);
+    }
   } catch (err) {
     console.error("[Poller] Error:", err.message);
   }
 }
 
 export function startPoller() {
-  console.log(`[Poller] Starting — will poll every ${POLL_INTERVAL_MS / 60000} minutes`);
-  setTimeout(pollPaidInvoices, 30000);
+  console.log(`[Poller] Starting — polling every ${POLL_INTERVAL_MS / 1000} seconds`);
+  setTimeout(pollPaidInvoices, 5000);
   setInterval(pollPaidInvoices, POLL_INTERVAL_MS);
 }
