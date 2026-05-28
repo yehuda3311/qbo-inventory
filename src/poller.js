@@ -2,10 +2,9 @@ import { qboService } from "./services/qbo.js";
 import { jsonbinService } from "./services/jsonbin.js";
 import { loadTokens } from "./routes/auth.js";
 
-const POLL_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
+const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
-// Track which invoices we've already processed so we don't double-deduct
 async function getProcessedInvoices() {
   try {
     const binId = process.env.JSONBIN_BIN_ID;
@@ -29,7 +28,6 @@ async function saveProcessedInvoice(invoiceId) {
     const processed = data?.processedInvoices || [];
     if (!processed.includes(invoiceId)) {
       processed.push(invoiceId);
-      // Keep last 1000 only
       if (processed.length > 1000) processed.splice(0, processed.length - 1000);
       data.processedInvoices = processed;
       await fetch(`${JSONBIN_API}/b/${binId}`, {
@@ -50,8 +48,10 @@ async function pollPaidInvoices() {
       return;
     }
 
-    // Get invoices updated in the last 10 minutes
-    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString().replace('T', ' ').split('.')[0];
+    // QBO requires date in format: YYYY-MM-DDTHH:MM:SS
+    const sinceDate = new Date(Date.now() - 10 * 60 * 1000);
+    const since = sinceDate.toISOString().replace(/\.\d{3}Z$/, '');
+
     const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.LastUpdatedTime > '${since}'`);
     const invoices = data?.QueryResponse?.Invoice || [];
 
@@ -96,8 +96,6 @@ async function pollPaidInvoices() {
 
 export function startPoller() {
   console.log(`[Poller] Starting — will poll every ${POLL_INTERVAL_MS / 60000} minutes`);
-  // Run once immediately after 30 seconds
   setTimeout(pollPaidInvoices, 30000);
-  // Then every 5 minutes
   setInterval(pollPaidInvoices, POLL_INTERVAL_MS);
 }
