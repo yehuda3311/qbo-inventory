@@ -1,35 +1,63 @@
 import { Router } from "express";
-import { jsonbinService } from "../services/jsonbin.js";
 
 export const inventoryRouter = Router();
 
-// GET current inventory
+const JSONBIN_API = "https://api.jsonbin.io/v3";
+
+// GET current inventory — always fresh, no cache
 inventoryRouter.get("/", async (req, res) => {
+  const binId = process.env.JSONBIN_BIN_ID;
+  const apiKey = process.env.JSONBIN_API_KEY;
   try {
-    const inv = await jsonbinService.getInventory();
-    res.json(inv);
+    const r = await fetch(`${JSONBIN_API}/b/${binId}?t=${Date.now()}`, {
+      headers: { 
+        "X-Master-Key": apiKey, 
+        "X-Bin-Meta": "false",
+        "Cache-Control": "no-cache, no-store",
+        "Pragma": "no-cache"
+      },
+      cache: "no-store"
+    });
+    if (!r.ok) throw new Error(`JSONBin read failed: ${r.status}`);
+    const data = await r.json();
+    
+    // Set no-cache headers on response too
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST update full inventory (used by frontend save)
+// PUT update full inventory
 inventoryRouter.put("/", async (req, res) => {
+  const binId = process.env.JSONBIN_BIN_ID;
+  const apiKey = process.env.JSONBIN_API_KEY;
   try {
-    const result = await jsonbinService.updateInventory(req.body);
-    res.json(result);
+    const r = await fetch(`${JSONBIN_API}/b/${binId}`, {
+      method: "PUT",
+      headers: { 
+        "Content-Type": "application/json", 
+        "X-Master-Key": apiKey,
+        "Cache-Control": "no-cache"
+      },
+      body: JSON.stringify(req.body),
+    });
+    if (!r.ok) throw new Error(`JSONBin write failed: ${r.status}`);
+    res.json(await r.json());
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST manual deduction (for testing)
+// POST manual deduction
 inventoryRouter.post("/deduct", async (req, res) => {
-  const { lines } = req.body; // [{ itemId, itemName, qty }]
-  if (!lines?.length) {
-    return res.status(400).json({ error: "lines array required" });
-  }
+  const { lines } = req.body;
+  if (!lines?.length) return res.status(400).json({ error: "lines array required" });
   try {
+    const { jsonbinService } = await import("../services/jsonbin.js");
     const result = await jsonbinService.deductSoldItems(lines);
     res.json(result);
   } catch (err) {
