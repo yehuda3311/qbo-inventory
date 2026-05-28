@@ -113,3 +113,54 @@ productsRouter.post("/import", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Debug JSONBin read/write cycle
+productsRouter.get("/jsonbin-debug", async (req, res) => {
+  const binId = process.env.JSONBIN_BIN_ID;
+  const apiKey = process.env.JSONBIN_API_KEY;
+  const base = "https://api.jsonbin.io/v3";
+
+  try {
+    // Step 1: Read with /latest
+    const r1 = await fetch(`${base}/b/${binId}/latest`, { headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" } });
+    const d1 = await r1.json();
+    const qtyBefore = d1?.state?.kratom?.products?.find(p => p.qboItemId === "1010000301")?.qty;
+
+    // Step 2: Read without /latest
+    const r2 = await fetch(`${base}/b/${binId}`, { headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" } });
+    const d2 = await r2.json();
+    const qtyBefore2 = d2?.state?.kratom?.products?.find(p => p.qboItemId === "1010000301")?.qty;
+
+    // Step 3: Write qty-1 using d1
+    const testQty = (qtyBefore || 10) - 1;
+    const prod = d1?.state?.kratom?.products?.find(p => p.qboItemId === "1010000301");
+    if (prod) prod.qty = testQty;
+    d1.debugWriteAt = new Date().toISOString();
+
+    const w = await fetch(`${base}/b/${binId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
+      body: JSON.stringify(d1)
+    });
+    const writeResult = await w.json();
+    const qtyInWriteResponse = writeResult?.record?.state?.kratom?.products?.find(p => p.qboItemId === "1010000301")?.qty;
+
+    // Step 4: Read back immediately with /latest
+    await new Promise(r => setTimeout(r, 1000)); // wait 1 second
+    const r3 = await fetch(`${base}/b/${binId}/latest`, { headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" } });
+    const d3 = await r3.json();
+    const qtyAfter = d3?.state?.kratom?.products?.find(p => p.qboItemId === "1010000301")?.qty;
+
+    res.json({
+      step1_read_latest: qtyBefore,
+      step2_read_direct: qtyBefore2,
+      step3_wrote_qty: testQty,
+      step3_write_status: w.status,
+      step3_qty_in_response: qtyInWriteResponse,
+      step4_read_back_latest: qtyAfter,
+      verdict: qtyAfter === testQty ? "✅ Write is sticking" : "❌ Write is NOT sticking"
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
