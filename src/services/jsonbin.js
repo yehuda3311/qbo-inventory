@@ -1,5 +1,3 @@
-import { config } from "../config.js";
-
 function getBinConfig() {
   return {
     binId: process.env.JSONBIN_BIN_ID,
@@ -15,7 +13,7 @@ export const jsonbinService = {
       headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" },
     });
     if (!res.ok) throw new Error(`JSONBin read failed: ${res.status}`);
-    return res.json();
+    return res.json(); // Returns the raw record (no wrapper when X-Bin-Meta: false)
   },
 
   async updateInventory(inventoryData) {
@@ -30,16 +28,22 @@ export const jsonbinService = {
   },
 
   async deductSoldItems(invoiceLines) {
-    const inventory = await this.getInventory();
+    const raw = await this.getInventory();
+    
+    // JSONBin returns { record: {...} } even with X-Bin-Meta: false in some cases
+    // Handle both formats
+    const inventory = raw?.record ? raw.record : raw;
+    
+    console.log("[JSONBin] Data structure keys:", Object.keys(inventory));
+    console.log("[JSONBin] Has state:", !!inventory?.state);
+    console.log("[JSONBin] State keys:", inventory?.state ? Object.keys(inventory.state) : "none");
+
     const updated = [];
     const notFound = [];
-
-    // Search across all brands (kratom, kava) and legacy keys
     const brands = ["kratom", "kava", "kratomyx", "kavana"];
 
     for (const line of invoiceLines) {
       let matched = false;
-
       for (const brand of brands) {
         const products = inventory?.state?.[brand]?.products || [];
         const product = products.find(
@@ -64,14 +68,16 @@ export const jsonbinService = {
           break;
         }
       }
-
-      if (!matched) {
-        notFound.push(line);
-      }
+      if (!matched) notFound.push(line);
     }
 
     inventory.lastSyncedAt = new Date().toISOString();
-    await this.updateInventory(inventory);
+    
+    // Write back — if original had record wrapper, preserve full structure
+    const toWrite = raw?.record ? { ...raw, record: inventory } : inventory;
+    await this.updateInventory(toWrite);
+
+    console.log("[JSONBin] Written back. Updated:", JSON.stringify(updated));
 
     return { updated, notFound, newInventory: inventory };
   },
