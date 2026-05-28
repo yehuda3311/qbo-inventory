@@ -1,0 +1,18 @@
+{
+  "name": "qbo-inventory-sync",
+  "version": "1.0.0",
+  "description": "QuickBooks Online ↔ Kratomyx & Kavana inventory sync server",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "express-session": "^1.17.3"
+  }
+}

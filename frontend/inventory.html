@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Kratomyx & Kavana — Inventory</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --green:#2d6a2d;--green2:#3d8c3d;--green-light:#e8f5e8;
+  --gold:#8B6914;--gold2:#b8860b;--gold-light:#fef9e7;
+  --bg:#fff;--bg2:#f7f7f5;--bg3:#efefeb;
+  --bg-danger:#fcebeb;--bg-success:#eaf3de;--bg-warning:#faeeda;--bg-info:#e6f1fb;
+  --text:#1a1a18;--text2:#5a5a56;--text3:#9a9a94;
+  --text-danger:#a32d2d;--text-success:#3b6d11;--text-warning:#854f0b;--text-info:#185fa5;
+  --border:rgba(0,0,0,0.1);--border2:rgba(0,0,0,0.2);
+  --radius:8px;--radius-lg:12px;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#1a1a18;--bg2:#242420;--bg3:#2e2e2a;
+  --bg-danger:#3a1212;--bg-success:#1a2e0a;--bg-warning:#3a2205;--bg-info:#0c2a4a;
+  --text:#f0efea;--text2:#a0a09a;--text3:#6a6a64;
+  --text-danger:#f09595;--text-success:#97c459;--text-warning:#ef9f27;--text-info:#85b7eb;
+  --border:rgba(255,255,255,0.1);--border2:rgba(255,255,255,0.2);
+  --green-light:#1a2e1a;--gold-light:#2a2010;
+}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg3);color:var(--text);min-height:100vh;font-size:15px;line-height:1.5}
+.topbar{background:var(--green);padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:20}
+.topbar-logo-text{display:flex;flex-direction:column;line-height:1.15}
+.brand-main{font-size:15px;font-weight:700;color:#fff}
+.brand-sub{font-size:11px;color:rgba(255,255,255,0.6)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.sync-status{font-size:12px;color:rgba(255,255,255,0.8);display:flex;align-items:center;gap:5px}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:#4caf50;flex-shrink:0;transition:background .3s}
+.sync-dot.syncing{background:#ffc107;animation:pulse 1s infinite}
+.sync-dot.error{background:#f44336}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* QBO status chip in topbar */
+.qbo-chip{display:flex;align-items:center;gap:5px;font-size:11px;color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);border-radius:100px;padding:3px 10px;cursor:pointer;transition:background .15s}
+.qbo-chip:hover{background:rgba(255,255,255,0.2)}
+.qbo-chip-dot{width:6px;height:6px;border-radius:50%;background:#f44336}
+.qbo-chip-dot.connected{background:#4caf50}
+.brand-bar{background:var(--bg);border-bottom:0.5px solid var(--border);display:flex;padding:0 1.5rem}
+.brand-tab{padding:13px 22px;font-size:14px;font-weight:600;cursor:pointer;border:none;background:transparent;color:var(--text2);border-bottom:3px solid transparent;transition:all .15s;display:flex;align-items:center;gap:7px}
+.brand-tab.active-k{color:var(--green);border-bottom-color:var(--green)}
+.brand-tab.active-v{color:var(--gold);border-bottom-color:var(--gold)}
+.brand-tab:hover{color:var(--text)}
+.pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:100px}
+.pill-k{background:var(--green-light);color:var(--green)}
+.pill-v{background:var(--gold-light);color:var(--gold)}
+.container{max-width:1060px;margin:0 auto;padding:1.25rem 1rem}
+.tabs{display:flex;gap:4px;margin-bottom:1.25rem;background:var(--bg2);padding:4px;border-radius:var(--radius);border:0.5px solid var(--border)}
+.tab{flex:1;padding:7px 10px;border:none;background:transparent;border-radius:6px;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+.tab.active{background:var(--bg);color:var(--text);border:0.5px solid var(--border)}
+.tab:hover:not(.active){color:var(--text);background:var(--bg3)}
+.tab .alert-dot{width:6px;height:6px;border-radius:50%;background:#e24b4a;flex-shrink:0}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-bottom:1.25rem}
+.stat{background:var(--bg2);border-radius:var(--radius);padding:.9rem 1rem;border:0.5px solid var(--border)}
+.stat-label{font-size:11px;color:var(--text2);margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.stat-value{font-size:24px;font-weight:700;color:var(--text)}
+.card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1rem}
+.card-title{font-size:11px;font-weight:700;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.card-title small{font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text3)}
+.dash-cols{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+@media(max-width:750px){.dash-cols{grid-template-columns:1fr}}
+.dash-col-header{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;padding-bottom:8px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:7px}
+.col-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.col-icon-mat{background:var(--green-light);color:var(--green)}
+.col-icon-prod{background:var(--gold-light);color:var(--gold)}
+.col-icon-qbo{background:var(--bg-info);color:var(--text-info)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.form-row-4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;color:var(--text2);font-weight:500}
+.field .hint{font-size:11px;color:var(--text3);font-weight:400}
+.field input,.field select{width:100%;padding:8px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);outline:none;transition:border-color .15s;font-family:inherit}
+.field input:focus,.field select:focus{border-color:var(--green2);box-shadow:0 0 0 2px rgba(45,106,45,.12)}
+.btn{padding:8px 16px;border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;border:0.5px solid var(--border2);background:var(--bg);color:var(--text);transition:all .12s;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.btn:hover{background:var(--bg2)}.btn:active{transform:scale(.98)}
+.btn-green{background:var(--green);color:#fff;border-color:var(--green)}.btn-green:hover{background:var(--green2)}
+.btn-gold{background:var(--gold);color:#fff;border-color:var(--gold)}.btn-gold:hover{background:var(--gold2)}
+.btn-blue{background:#185fa5;color:#fff;border-color:#185fa5}.btn-blue:hover{background:#1a6dbf}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-danger{color:var(--text-danger);border-color:rgba(163,45,45,.3)}.btn-danger:hover{background:var(--bg-danger)}
+.btn-success{color:var(--text-success);border-color:rgba(59,109,17,.3)}.btn-success:hover{background:var(--bg-success)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;font-weight:600;color:var(--text2);letter-spacing:.05em;text-transform:uppercase;padding:0 8px 8px;border-bottom:0.5px solid var(--border)}
+td{padding:9px 8px;border-bottom:0.5px solid var(--border);color:var(--text);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+.tbl-input{width:78px;padding:5px 7px;font-size:13px;border:0.5px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text);font-family:inherit;text-align:center}
+.badge{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:600}
+.badge-ok{background:#eaf3de;color:#3b6d11}
+.badge-warn{background:#faeeda;color:#854f0b}
+.badge-low{background:#fcebeb;color:#a32d2d}
+.badge-gray{background:var(--bg2);color:var(--text2);border:0.5px solid var(--border)}
+.badge-k{background:var(--green-light);color:var(--green)}
+.badge-v{background:var(--gold-light);color:var(--gold)}
+.badge-cat{background:var(--bg-info);color:var(--text-info);font-size:10px;padding:2px 7px}
+.badge-qbo{background:#e8f0fe;color:#1a56db;font-size:10px;padding:2px 7px}
+.reorder-item{background:var(--bg2);border:1.5px solid #e24b4a;border-radius:var(--radius);padding:10px 12px;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.reorder-item.warn{border-color:#ef9f27}
+.reorder-name{font-size:13px;font-weight:700}
+.reorder-detail{font-size:11px;color:var(--text2);margin-top:2px}
+.progress-bar{height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:5px;max-width:160px}
+.progress-fill{height:100%;border-radius:2px}
+.wu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:8px;margin-bottom:.75rem}
+.wu-item{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px}
+.wu-item.low{border-color:#e24b4a}
+.wu-item-name{font-size:12px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.wu-row{display:flex;align-items:center;gap:6px}
+.wu-sub{font-size:10px;color:var(--text3);margin-top:3px}
+.qty-input{width:80px;padding:6px 8px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:inherit;text-align:center}
+.lead-chip{background:var(--bg-info);color:var(--text-info);padding:2px 6px;border-radius:100px;font-size:10px;font-weight:600}
+/* Category grouping */
+.cat-group{margin-bottom:1.25rem}
+.cat-group-header{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;padding:6px 10px;background:var(--bg2);border-radius:var(--radius);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;border:0.5px solid var(--border)}
+.cat-group-header .cat-count{font-size:11px;font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0}
+.prod-wu-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.prod-wu-row:last-child{border-bottom:none}
+.prod-wu-name{font-size:13px;font-weight:500;flex:1}
+.prod-wu-cat{font-size:10px;color:var(--text3);margin-top:1px}
+.section{display:none}.section.active{display:block}
+.empty{text-align:center;padding:1.5rem;color:var(--text3);font-size:13px}
+.divider{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin:1rem 0 8px;display:flex;align-items:center;gap:8px}
+.divider::after{content:'';flex:1;height:0.5px;background:var(--border)}
+/* ── QBO Import Review Table ── */
+.qbo-import-row{display:grid;grid-template-columns:auto 1fr 120px 120px 80px;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);font-size:13px}
+.qbo-import-row:last-child{border-bottom:none}
+.qbo-import-row input[type=checkbox]{width:16px;height:16px;cursor:pointer;accent-color:var(--green)}
+.qbo-import-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qbo-import-name span{font-size:11px;color:var(--text3);font-weight:400;margin-left:4px}
+/* QBO Activity Log */
+.qbo-log{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:12px;max-height:220px;overflow-y:auto}
+.qbo-log-entry{padding:5px 0;border-bottom:0.5px solid var(--border);display:flex;gap:8px;align-items:flex-start}
+.qbo-log-entry:last-child{border-bottom:none}
+.qbo-log-time{color:var(--text3);white-space:nowrap;min-width:58px}
+.qbo-log-icon{flex-shrink:0;width:16px;text-align:center}
+.qbo-log-text{color:var(--text2);line-height:1.4}
+.qbo-log-text strong{color:var(--text)}
+/* Connection banner */
+.connect-banner{background:var(--bg-info);border:1px solid rgba(24,95,165,.2);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1rem;display:flex;align-items:center;gap:12px}
+.connect-banner-icon{font-size:24px;color:var(--text-info);flex-shrink:0}
+.connect-banner-body{flex:1}
+.connect-banner-title{font-size:13px;font-weight:700;color:var(--text-info);margin-bottom:2px}
+.connect-banner-sub{font-size:12px;color:var(--text2)}
+/* Server URL field */
+.server-field{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.server-field input{flex:1;padding:8px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-family:inherit;outline:none}
+.server-field input:focus{border-color:#185fa5;box-shadow:0 0 0 2px rgba(24,95,165,.12)}
+/* Import staging area */
+#qbo-staging{display:none}
+.staging-header{display:grid;grid-template-columns:auto 1fr 120px 120px 80px;gap:10px;padding:0 0 6px;border-bottom:1.5px solid var(--border);margin-bottom:4px}
+.staging-header span{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em}
+@media(max-width:600px){.form-row,.form-row-3,.form-row-4{grid-template-columns:1fr}.tab span{display:none}.qbo-import-row,.staging-header{grid-template-columns:auto 1fr 90px}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo-text">
+    <span class="brand-main">Kratomyx & Kavana</span>
+    <span class="brand-sub">Inventory Management</span>
+  </div>
+  <div class="topbar-right">
+    <button class="qbo-chip" id="qbo-status-chip" onclick="switchTab('quickbooks')">
+      <div class="qbo-chip-dot" id="qbo-chip-dot"></div>
+      <span id="qbo-chip-label">QBO: Not connected</span>
+    </button>
+    <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-label">Connecting…</span></div>
+  </div>
+</div>
+
+<div class="brand-bar">
+  <button class="brand-tab active-k" id="brand-btn-kratom" onclick="switchBrand('kratom')"><span class="pill pill-k">K</span> Kratom Products</button>
+  <button class="brand-tab" id="brand-btn-kava" onclick="switchBrand('kava')"><span class="pill pill-v">V</span> Kava Products</button>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" id="tab-btn-dashboard" onclick="switchTab('dashboard')"><i class="ti ti-layout-dashboard"></i><span>Dashboard</span></button>
+    <button class="tab" id="tab-btn-materials" onclick="switchTab('materials')"><i class="ti ti-leaf"></i><span>Raw Materials</span></button>
+    <button class="tab" id="tab-btn-products" onclick="switchTab('products')"><i class="ti ti-package"></i><span>Finished Products</span></button>
+    <button class="tab" id="tab-btn-orders" onclick="switchTab('orders')"><i class="ti ti-truck"></i><span>Orders</span></button>
+    <button class="tab" id="tab-btn-quickbooks" onclick="switchTab('quickbooks')"><i class="ti ti-brand-quickbooks"></i><span>QuickBooks</span></button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="tab-dashboard" class="section active">
+    <div class="stat-grid" id="dash-stats"></div>
+    <div class="dash-cols">
+      <div>
+        <div class="dash-col-header"><div class="col-icon col-icon-mat"><i class="ti ti-leaf"></i></div>Raw Materials</div>
+        <div class="card">
+          <div class="card-title">Reorder alerts <small id="mat-alert-count"></small></div>
+          <div id="mat-reorder-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Update stock quantities <small>edit &amp; save weekly</small></div>
+          <div id="mat-wu-grid"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <button class="btn btn-sm" id="mat-save-btn" onclick="saveMatWeekly()"><i class="ti ti-device-floppy"></i> Save quantities</button>
+            <span id="mat-save-msg" style="font-size:12px;color:var(--text-success);display:none"><i class="ti ti-circle-check"></i> Saved!</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Pending material orders</div>
+          <div id="dash-mat-orders"></div>
+        </div>
+      </div>
+      <div>
+        <div class="dash-col-header"><div class="col-icon col-icon-prod"><i class="ti ti-package"></i></div>Finished Products</div>
+        <div class="card">
+          <div class="card-title">Low stock alerts <small id="prod-alert-count"></small></div>
+          <div id="prod-reorder-list"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Log a batch <small>add completed production</small></div>
+          <div id="batch-section"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Update product quantities <small>edit &amp; save</small></div>
+          <div id="prod-wu-list"></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+            <button class="btn btn-sm" id="prod-save-btn" onclick="saveProdWeekly()"><i class="ti ti-device-floppy"></i> Save quantities</button>
+            <span id="prod-save-msg" style="font-size:12px;color:var(--text-success);display:none"><i class="ti ti-circle-check"></i> Saved!</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RAW MATERIALS -->
+  <div id="tab-materials" class="section">
+    <div class="card">
+      <div class="card-title">Add / update raw material</div>
+      <div class="form-row-4">
+        <div class="field"><label>Material name</label><input id="mat-name" placeholder="e.g. Kratom Powder"/></div>
+        <div class="field"><label>Qty in stock</label><input id="mat-qty" type="number" min="0" step="any" placeholder="0"/></div>
+        <div class="field"><label>Unit</label><input id="mat-unit" placeholder="kg, lbs, g…"/></div>
+        <div class="field"><label>Reorder point <span class="hint">(alert when ≤)</span></label><input id="mat-min" type="number" min="0" step="any" placeholder="e.g. 10"/></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Lead time (days) <span class="hint">(time to arrive after ordering)</span></label><input id="mat-lead" type="number" min="0" placeholder="e.g. 7"/></div>
+        <div class="field"><label>Supplier <span class="hint">(optional)</span></label><input id="mat-supplier" placeholder="Supplier name"/></div>
+      </div>
+      <button class="btn btn-green" id="mat-add-btn" onclick="addMaterial()"><i class="ti ti-plus"></i> Add material</button>
+    </div>
+    <div class="card">
+      <div class="card-title">All raw materials — <span id="brand-label-mat"></span></div>
+      <div id="materials-table"></div>
+    </div>
+  </div>
+
+  <!-- FINISHED PRODUCTS -->
+  <div id="tab-products" class="section">
+    <div class="card">
+      <div class="card-title">Add / update finished product</div>
+      <div class="form-row-4">
+        <div class="field"><label>Product name</label><input id="prod-name" placeholder="e.g. Red Bali 250g"/></div>
+        <div class="field"><label>Category</label>
+          <select id="prod-cat">
+            <option value="">Select category…</option>
+            <option>Bulk Bags</option>
+            <option>100mg Stickpacks</option>
+            <option>200mg Stickpacks</option>
+            <option>Gallons</option>
+            <option>Shots</option>
+          </select>
+        </div>
+        <div class="field"><label>Qty in stock</label><input id="prod-qty" type="number" min="0" step="any" placeholder="0"/></div>
+        <div class="field"><label>Unit</label><input id="prod-unit" placeholder="bags, bottles, pcs…"/></div>
+      </div>
+      <div class="form-row-3">
+        <div class="field"><label>Min stock <span class="hint">(alert to make more)</span></label><input id="prod-min" type="number" min="0" step="any" placeholder="e.g. 50"/></div>
+        <div class="field"><label>Lead time (days) <span class="hint">(delivery time to customer)</span></label><input id="prod-lead" type="number" min="0" placeholder="e.g. 3"/></div>
+        <div class="field"><label>SKU <span class="hint">(optional)</span></label><input id="prod-sku" placeholder="e.g. KMX-RB-250"/></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Notes <span class="hint">(optional)</span></label><input id="prod-notes" placeholder="Any notes…"/></div>
+      </div>
+      <button class="btn btn-green" id="prod-add-btn" onclick="addProduct()"><i class="ti ti-plus"></i> Add product</button>
+    </div>
+    <div class="card">
+      <div class="card-title">All finished products — <span id="brand-label-prod"></span></div>
+      <div id="products-by-category"></div>
+    </div>
+  </div>
+
+  <!-- ORDERS -->
+  <div id="tab-orders" class="section">
+    <div class="card">
+      <div class="card-title">Log incoming raw material order</div>
+      <div class="form-row-3">
+        <div class="field"><label>Material</label><select id="order-item"><option value="">Select material…</option></select></div>
+        <div class="field"><label>Quantity ordered</label><input id="order-qty" type="number" min="0" step="any" placeholder="0"/></div>
+        <div class="field"><label>Expected delivery</label><input id="order-date" type="date"/></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>Supplier / vendor</label><input id="order-supplier" placeholder="Supplier name"/></div>
+        <div class="field"><label>PO / reference #</label><input id="order-ref" placeholder="Optional"/></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-green" id="order-add-btn" onclick="addOrder()"><i class="ti ti-truck"></i> Log order</button>
+        <button class="btn btn-success" onclick="receiveAll()"><i class="ti ti-checks"></i> Receive all pending</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Pending orders</div>
+      <div id="orders-pending"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Received history <small>(last 30)</small></div>
+      <div id="orders-history"></div>
+    </div>
+  </div>
+
+  <!-- ── QUICKBOOKS TAB ── -->
+  <div id="tab-quickbooks" class="section">
+
+    <!-- Connection status banner -->
+    <div id="qbo-connect-banner" class="connect-banner">
+      <div class="connect-banner-icon"><i class="ti ti-link"></i></div>
+      <div class="connect-banner-body">
+        <div class="connect-banner-title" id="qbo-banner-title">Connect your Railway backend to QuickBooks</div>
+        <div class="connect-banner-sub" id="qbo-banner-sub">Enter your Railway server URL below, then authorize QuickBooks to enable automatic inventory deductions on paid invoices.</div>
+      </div>
+      <button class="btn btn-blue" id="qbo-connect-btn" onclick="qboConnect()"><i class="ti ti-plug"></i> Connect QBO</button>
+    </div>
+
+    <div class="dash-cols">
+      <!-- LEFT: Setup & Connection -->
+      <div>
+        <div class="dash-col-header"><div class="col-icon col-icon-qbo"><i class="ti ti-settings"></i></div>Setup & Connection</div>
+
+        <div class="card">
+          <div class="card-title">Railway server URL <small>your deployed backend</small></div>
+          <div class="server-field">
+            <input id="qbo-server-url" placeholder="https://your-app.railway.app" type="url"/>
+            <button class="btn btn-sm btn-success" onclick="saveServerUrl()"><i class="ti ti-check"></i> Save</button>
+          </div>
+          <div style="font-size:12px;color:var(--text3);line-height:1.5">
+            After saving, click <strong>Connect QBO</strong> above to open the QuickBooks authorization page. You'll be redirected back automatically.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Connection status</div>
+          <div id="qbo-conn-detail" style="font-size:13px;color:var(--text2)">
+            <p class="empty">Not connected to Railway server yet.</p>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="qboCheckStatus()"><i class="ti ti-refresh"></i> Check status</button>
+            <button class="btn btn-sm btn-danger" onclick="qboDisconnect()"><i class="ti ti-unlink"></i> Disconnect</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Manual invoice sync <small>test / catch-up</small></div>
+          <div class="form-row" style="margin-bottom:8px">
+            <div class="field">
+              <label>Invoice ID <span class="hint">(from QBO)</span></label>
+              <input id="qbo-invoice-id" placeholder="e.g. 123"/>
+            </div>
+            <div class="field">
+              <label>Sync paid invoices since <span class="hint">(optional)</span></label>
+              <input id="qbo-since-date" type="date"/>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-green" onclick="qboSyncInvoice()"><i class="ti ti-refresh"></i> Sync invoice</button>
+            <button class="btn btn-sm" onclick="qboSyncAllPaid()"><i class="ti ti-history"></i> Sync all paid since date</button>
+          </div>
+          <div id="qbo-sync-result" style="margin-top:10px;display:none"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Product Import & Activity -->
+      <div>
+        <div class="dash-col-header"><div class="col-icon col-icon-prod"><i class="ti ti-package"></i></div>Product Import & Activity</div>
+
+        <div class="card">
+          <div class="card-title">Import products from QuickBooks <small>review before adding</small></div>
+          <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div class="field" style="min-width:140px">
+              <label>Brand to import into</label>
+              <select id="qbo-import-brand">
+                <option value="kratom">Kratom Products</option>
+                <option value="kava">Kava Products</option>
+              </select>
+            </div>
+            <button class="btn btn-sm btn-blue" onclick="qboFetchProducts()" style="margin-top:14px"><i class="ti ti-cloud-download"></i> Fetch from QBO</button>
+          </div>
+
+          <!-- Staging area — hidden until products fetched -->
+          <div id="qbo-staging">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-size:12px;color:var(--text2)"><span id="qbo-item-count">0</span> items fetched — select &amp; map categories to import</span>
+              <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="qbo-select-all" onchange="qboToggleAll(this.checked)"/> Select all
+              </label>
+            </div>
+            <div class="staging-header">
+              <span></span><span>Product name</span><span>Category</span><span>QBO SKU</span><span>Qty</span>
+            </div>
+            <div id="qbo-items-list"></div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-sm btn-green" onclick="qboImportSelected()"><i class="ti ti-file-import"></i> Import selected</button>
+              <button class="btn btn-sm btn-danger" onclick="document.getElementById('qbo-staging').style.display='none'"><i class="ti ti-x"></i> Cancel</button>
+            </div>
+            <div id="qbo-import-result" style="margin-top:8px;display:none"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Sync activity log <small>recent webhook events</small></div>
+          <div class="qbo-log" id="qbo-log">
+            <div class="empty">No sync activity yet. Connect QBO to start receiving webhook events.</div>
+          </div>
+          <button class="btn btn-sm" style="margin-top:8px" onclick="qboFetchLog()"><i class="ti ti-refresh"></i> Refresh log</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Webhook endpoint <small>paste into QBO Developer Portal</small></div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:8px">Add this URL under <em>App Settings → Webhooks</em> in your Intuit Developer account:</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <code id="qbo-webhook-url" style="flex:1;background:var(--bg2);border:0.5px solid var(--border);border-radius:6px;padding:7px 10px;font-size:12px;color:var(--text);word-break:break-all">—</code>
+            <button class="btn btn-sm" onclick="copyWebhookUrl()"><i class="ti ti-copy"></i></button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">Subscribe to: <strong>Invoice (Update)</strong> events only.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- END QuickBooks tab -->
+
+</div><!-- /container -->
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+const BIN_ID     = '6a16384b8ef04f45381f726b';
+const MASTER_KEY = '$2a$10$zC/U9slAqRTkBV6BC/QXNu31iO0ByCF8z8IZu85grF81J/iFuqNUC';
+const API        = 'https://api.jsonbin.io/v3/b';
+
+const CATEGORIES = ['Bulk Bags','100mg Stickpacks','200mg Stickpacks','Gallons','Shots'];
+
+let activeBrand = 'kratom';
+let activeTab   = 'dashboard';
+let matIdC=1, prodIdC=1, orderIdC=1;
+let state = {
+  kratom:{ materials:[], products:[], orders:[] },
+  kava:  { materials:[], products:[], orders:[] },
+  lastUpdated: null
+};
+
+// QBO state
+let qboServerUrl  = localStorage.getItem('qbo_server_url') || '';
+let qboConnected  = false;
+let qboActivityLog = JSON.parse(localStorage.getItem('qbo_log') || '[]');
+let qboFetchedItems = [];
+
+// ── BRAND / TAB ACCESSORS ────────────────────────────────────────────────────
+function B(){
+  if(!state[activeBrand]) state[activeBrand]={materials:[],products:[],orders:[]};
+  if(!state[activeBrand].materials) state[activeBrand].materials=[];
+  if(!state[activeBrand].products)  state[activeBrand].products=[];
+  if(!state[activeBrand].orders)    state[activeBrand].orders=[];
+  return state[activeBrand];
+}
+
+// ── SYNC ─────────────────────────────────────────────────────────────────────
+function setSyncStatus(s){
+  const dot=document.getElementById('sync-dot'), lbl=document.getElementById('sync-label');
+  dot.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
+  lbl.textContent=s==='ok'?'Synced':s==='syncing'?'Syncing…':'Offline';
+}
+
+async function fetchBin(){
+  setSyncStatus('syncing');
+  try{
+    const r=await fetch(`${API}/${BIN_ID}/latest`,{headers:{'X-Master-Key':MASTER_KEY}});
+    if(!r.ok) throw new Error('fetch '+r.status);
+    const d=await r.json();
+    if(d.record && d.record.state){
+      state=d.record.state;
+      matIdC=d.record.matIdC||1;
+      prodIdC=d.record.prodIdC||1;
+      orderIdC=d.record.orderIdC||1;
+    }
+    migrateBrandKeys();
+    setSyncStatus('ok');
+    render();
+  }catch(e){ console.error(e); setSyncStatus('error'); }
+}
+
+async function pushBin(){
+  setSyncStatus('syncing');
+  try{
+    await fetch(`${API}/${BIN_ID}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
+      body:JSON.stringify({state,matIdC,prodIdC,orderIdC})
+    });
+    setSyncStatus('ok');
+  }catch(e){ console.error(e); setSyncStatus('error'); }
+}
+
+function saveLocal(){ try{localStorage.setItem('kk_state_v4',JSON.stringify({state,matIdC,prodIdC,orderIdC}));}catch(e){} }
+function loadLocal(){
+  try{
+    const d=localStorage.getItem('kk_state_v4');
+    if(d){ const p=JSON.parse(d); state=p.state; matIdC=p.matIdC||1; prodIdC=p.prodIdC||1; orderIdC=p.orderIdC||1; }
+  }catch(e){}
+  migrateBrandKeys();
+}
+function migrateBrandKeys(){
+  if(state.kratomyx && !state.kratom){ state.kratom=state.kratomyx; delete state.kratomyx; }
+  if(state.kavana   && !state.kava)  { state.kava=state.kavana;     delete state.kavana; }
+  if(!state.kratom) state.kratom={materials:[],products:[],orders:[]};
+  if(!state.kava)   state.kava={materials:[],products:[],orders:[]};
+}
+function saveAndSync(){ saveLocal(); pushBin(); }
+
+// ── NAV ───────────────────────────────────────────────────────────────────────
+function switchBrand(b){
+  activeBrand=b;
+  ['kratom','kava'].forEach(br=>{
+    document.getElementById('brand-btn-'+br).className='brand-tab'+(br===b?(b==='kratom'?' active-k':' active-v'):'');
+  });
+  render();
+}
+function switchTab(t){
+  activeTab=t;
+  ['dashboard','materials','products','orders','quickbooks'].forEach(n=>{
+    document.getElementById('tab-'+n).classList.toggle('active',n===t);
+    document.getElementById('tab-btn-'+n).classList.toggle('active',n===t);
+  });
+  if(t==='quickbooks') renderQBO();
+  render();
+}
+
+// ── MATERIALS ────────────────────────────────────────────────────────────────
+function addMaterial(){
+  const name=document.getElementById('mat-name').value.trim();
+  if(!name){ alert('Please enter a material name.'); return; }
+  const qty=parseFloat(document.getElementById('mat-qty').value)||0;
+  const unit=document.getElementById('mat-unit').value.trim()||'units';
+  const min=parseFloat(document.getElementById('mat-min').value)||0;
+  const lead=parseInt(document.getElementById('mat-lead').value)||0;
+  const supplier=document.getElementById('mat-supplier').value.trim();
+  const ex=B().materials.find(m=>m.name.toLowerCase()===name.toLowerCase());
+  if(ex){ Object.assign(ex,{qty,unit,min,lead,supplier}); }
+  else{ B().materials.push({id:matIdC++,name,qty,unit,min,lead,supplier}); }
+  ['mat-name','mat-qty','mat-unit','mat-min','mat-lead','mat-supplier'].forEach(id=>document.getElementById(id).value='');
+  saveAndSync(); render();
+}
+function delMat(id){ if(!confirm('Delete this material?')) return; B().materials=B().materials.filter(m=>m.id!==id); saveAndSync(); render(); }
+
+// ── PRODUCTS ─────────────────────────────────────────────────────────────────
+function addProduct(){
+  const name=document.getElementById('prod-name').value.trim();
+  if(!name){ alert('Please enter a product name.'); return; }
+  const cat=document.getElementById('prod-cat').value;
+  if(!cat){ alert('Please select a category.'); return; }
+  const qty=parseFloat(document.getElementById('prod-qty').value)||0;
+  const unit=document.getElementById('prod-unit').value.trim()||'units';
+  const min=parseFloat(document.getElementById('prod-min').value)||0;
+  const lead=parseInt(document.getElementById('prod-lead').value)||0;
+  const sku=document.getElementById('prod-sku').value.trim();
+  const notes=document.getElementById('prod-notes').value.trim();
+  const ex=B().products.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  if(ex){ Object.assign(ex,{cat,qty,unit,min,lead,sku,notes}); }
+  else{ B().products.push({id:prodIdC++,name,cat,qty,unit,min,lead,sku,notes}); }
+  ['prod-name','prod-qty','prod-unit','prod-min','prod-lead','prod-sku','prod-notes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('prod-cat').value='';
+  saveAndSync(); render();
+}
+function delProd(id){ if(!confirm('Delete this product?')) return; B().products=B().products.filter(p=>p.id!==id); saveAndSync(); render(); }
+
+// ── BATCH LOG ────────────────────────────────────────────────────────────────
+function logBatch(){
+  const prodId=parseInt(document.getElementById('batch-prod').value);
+  const qty=parseFloat(document.getElementById('batch-qty').value)||0;
+  const notes=document.getElementById('batch-notes').value.trim();
+  if(!prodId){ alert('Select a product.'); return; }
+  if(!qty){ alert('Enter a quantity.'); return; }
+  const p=B().products.find(p=>p.id===prodId);
+  if(!p) return;
+  p.qty=(p.qty||0)+qty;
+  if(!p.batches) p.batches=[];
+  p.batches.push({qty,notes,date:new Date().toISOString().split('T')[0]});
+  document.getElementById('batch-qty').value='';
+  document.getElementById('batch-notes').value='';
+  saveAndSync(); render();
+}
+
+// ── WEEKLY SAVES ─────────────────────────────────────────────────────────────
+function saveMatWeekly(){
+  document.querySelectorAll('.wu-mat').forEach(inp=>{
+    const m=B().materials.find(m=>m.id===+inp.dataset.id);
+    if(m) m.qty=parseFloat(inp.value)||0;
+  });
+  state.lastUpdated=new Date().toISOString();
+  saveAndSync(); render();
+  const msg=document.getElementById('mat-save-msg');
+  msg.style.display='inline-flex'; setTimeout(()=>msg.style.display='none',2500);
+}
+function saveProdWeekly(){
+  document.querySelectorAll('.wu-prod').forEach(inp=>{
+    const p=B().products.find(p=>p.id===+inp.dataset.id);
+    if(p) p.qty=parseFloat(inp.value)||0;
+  });
+  state.lastUpdated=new Date().toISOString();
+  saveAndSync(); render();
+  const msg=document.getElementById('prod-save-msg');
+  msg.style.display='inline-flex'; setTimeout(()=>msg.style.display='none',2500);
+}
+
+// ── ORDERS ────────────────────────────────────────────────────────────────────
+function updateOrderSelect(){
+  const sel=document.getElementById('order-item');
+  if(!sel) return;
+  sel.innerHTML='<option value="">Select material…</option>'+B().materials.map(m=>`<option value="${m.id}">${m.name} (${m.qty} ${m.unit} on hand)</option>`).join('');
+}
+function addOrder(){
+  const itemId=parseInt(document.getElementById('order-item').value);
+  const qty=parseFloat(document.getElementById('order-qty').value)||0;
+  const date=document.getElementById('order-date').value;
+  const supplier=document.getElementById('order-supplier').value.trim();
+  const ref=document.getElementById('order-ref').value.trim();
+  if(!itemId){ alert('Select a material.'); return; }
+  if(!qty){ alert('Enter a quantity.'); return; }
+  B().orders.push({id:orderIdC++,itemId,qty,date,supplier,ref,received:false});
+  ['order-qty','order-date','order-supplier','order-ref'].forEach(id=>document.getElementById(id).value='');
+  saveAndSync(); render();
+}
+function receiveOrder(id){
+  const o=B().orders.find(o=>o.id===id); if(!o) return;
+  const m=B().materials.find(m=>m.id===o.itemId); if(m) m.qty=(m.qty||0)+o.qty;
+  o.received=true; o.receivedDate=new Date().toISOString().split('T')[0];
+  saveAndSync(); render();
+}
+function receiveAll(){
+  B().orders.filter(o=>!o.received).forEach(o=>{
+    const m=B().materials.find(m=>m.id===o.itemId); if(m) m.qty=(m.qty||0)+o.qty;
+    o.received=true; o.receivedDate=new Date().toISOString().split('T')[0];
+  });
+  saveAndSync(); render();
+}
+function delOrder(id){ B().orders=B().orders.filter(o=>o.id!==id); saveAndSync(); render(); }
+function matName(o){ const m=B().materials.find(m=>m.id===o.itemId); return m?m.name:'Unknown'; }
+function matUnit(o){ const m=B().materials.find(m=>m.id===o.itemId); return m?m.unit:''; }
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function getNeedsReorder(){
+  const mats=B().materials.filter(m=>m.min>0&&m.qty<=m.min);
+  const prods=B().products.filter(p=>p.min>0&&p.qty<=p.min);
+  return{mats,prods,total:mats.length+prods.length};
+}
+function updateAlertDot(){
+  const total=getNeedsReorder().total;
+  const btn=document.getElementById('tab-btn-dashboard');
+  let dot=btn.querySelector('.alert-dot');
+  if(total>0&&!dot){ dot=document.createElement('span'); dot.className='alert-dot'; btn.appendChild(dot); }
+  else if(total===0&&dot){ dot.remove(); }
+}
+function brandBtn(){ return activeBrand==='kratom'?'btn-green':'btn-gold'; }
+function brandPill(){ return activeBrand==='kratom'?'badge-k':'badge-v'; }
+function brandLabel(){ return activeBrand==='kratom'?'Kratom Products':'Kava Products'; }
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render(){
+  updateAlertDot();
+  const lm=document.getElementById('brand-label-mat');
+  const lp=document.getElementById('brand-label-prod');
+  if(lm) lm.innerHTML=`<span class="badge ${brandPill()}">${brandLabel()}</span>`;
+  if(lp) lp.innerHTML=`<span class="badge ${brandPill()}">${brandLabel()}</span>`;
+  renderStats();
+  renderDashboard();
+  renderMaterials();
+  renderProductsByCategory();
+  renderOrders();
+  updateOrderSelect();
+}
+
+function renderStats(){
+  const{mats,prods}=getNeedsReorder();
+  const pending=B().orders.filter(o=>!o.received);
+  document.getElementById('dash-stats').innerHTML=`
+    <div class="stat"><div class="stat-label">Raw materials</div><div class="stat-value">${B().materials.length}</div></div>
+    <div class="stat"><div class="stat-label">Finished products</div><div class="stat-value">${B().products.length}</div></div>
+    <div class="stat"><div class="stat-label">Material alerts</div><div class="stat-value" style="color:${mats.length?'var(--text-danger)':'var(--text-success)'}">${mats.length}</div></div>
+    <div class="stat"><div class="stat-label">Product alerts</div><div class="stat-value" style="color:${prods.length?'var(--text-danger)':'var(--text-success)'}">${prods.length}</div></div>
+    <div class="stat"><div class="stat-label">Pending orders</div><div class="stat-value">${pending.length}</div></div>`;
+}
+
+function renderDashboard(){
+  const{mats,prods}=getNeedsReorder();
+  const bb=brandBtn();
+  document.getElementById('mat-alert-count').textContent=mats.length?`${mats.length} need reordering`:'';
+  const marl=document.getElementById('mat-reorder-list');
+  if(!mats.length){ marl.innerHTML='<p class="empty" style="color:var(--text-success)"><i class="ti ti-circle-check"></i> All materials OK</p>'; }
+  else{ marl.innerHTML=mats.map(m=>{ const out=m.qty===0,pct=m.min>0?Math.min(100,Math.round((m.qty/m.min)*100)):0; return `<div class="reorder-item${out?'':' warn'}"><div style="flex:1"><div class="reorder-name">${m.name}</div><div class="reorder-detail">${out?'Out of stock':'On hand: '+m.qty+' '+m.unit} — min ${m.min}</div>${m.lead?`<div style="font-size:10px;color:var(--text3)"><i class="ti ti-clock" style="font-size:10px"></i> ${m.lead}d lead time</div>`:''}<div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${out?'#e24b4a':'#ef9f27'}"></div></div></div><button class="btn btn-sm ${bb}" onclick="switchTab('orders')"><i class="ti ti-truck"></i></button></div>`;}).join(''); }
+  const mwu=document.getElementById('mat-wu-grid');
+  if(!B().materials.length){ mwu.innerHTML='<p class="empty">No materials added yet.</p>'; }
+  else{ mwu.innerHTML=`<div class="wu-grid">${B().materials.map(m=>{ const low=m.min>0&&m.qty<=m.min; return `<div class="wu-item${low?' low':''}"><div class="wu-item-name">${m.name}${low?'<span class="badge badge-low" style="font-size:10px">Low</span>':''}${m.lead?`<span class="lead-chip">${m.lead}d</span>`:''}</div><div class="wu-row"><input type="number" class="wu-mat qty-input" data-id="${m.id}" value="${m.qty}" min="0" step="any"/><span style="font-size:12px;color:var(--text2)">${m.unit}</span></div>${m.min?`<div class="wu-sub">Reorder at ≤ ${m.min}</div>`:''}</div>`;}).join('')}</div>`; }
+  const dmo=document.getElementById('dash-mat-orders');
+  const pending=B().orders.filter(o=>!o.received);
+  if(!pending.length){ dmo.innerHTML='<p class="empty">No pending orders.</p>'; }
+  else{ dmo.innerHTML=`<table><thead><tr><th>Material</th><th>Qty</th><th>Expected</th><th>Supplier</th><th></th></tr></thead><tbody>${pending.map(o=>`<tr><td style="font-weight:600">${matName(o)}</td><td>${o.qty} ${matUnit(o)}</td><td>${o.date||'—'}</td><td>${o.supplier||'—'}</td><td><button class="btn btn-sm btn-success" onclick="receiveOrder(${o.id})"><i class="ti ti-check"></i></button></td></tr>`).join('')}</tbody></table>`; }
+  document.getElementById('prod-alert-count').textContent=prods.length?`${prods.length} need production`:'';
+  const parl=document.getElementById('prod-reorder-list');
+  if(!prods.length){ parl.innerHTML='<p class="empty" style="color:var(--text-success)"><i class="ti ti-circle-check"></i> All products above minimum</p>'; }
+  else{ parl.innerHTML=prods.map(p=>{ const out=p.qty===0,pct=p.min>0?Math.min(100,Math.round((p.qty/p.min)*100)):0; return `<div class="reorder-item${out?'':' warn'}"><div style="flex:1"><div class="reorder-name">${p.name} <span class="badge badge-cat">${p.cat||''}</span></div><div class="reorder-detail">${out?'Out of stock':'In stock: '+p.qty+' '+p.unit} — min ${p.min}</div>${p.lead?`<div style="font-size:10px;color:var(--text3)"><i class="ti ti-clock" style="font-size:10px"></i> ${p.lead}d delivery</div>`:''}<div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${out?'#e24b4a':'#ef9f27'}"></div></div></div></div>`;}).join(''); }
+  const bs=document.getElementById('batch-section');
+  if(!B().products.length){ bs.innerHTML='<p class="empty">Add finished products first.</p>'; }
+  else{
+    const opts=CATEGORIES.map(cat=>{
+      const prods=B().products.filter(p=>p.cat===cat);
+      if(!prods.length) return '';
+      return `<optgroup label="${cat}">${prods.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</optgroup>`;
+    }).join('');
+    bs.innerHTML=`<div class="form-row-3" style="margin-bottom:8px">
+      <div class="field"><label>Product</label><select id="batch-prod"><option value="">Select product…</option>${opts}</select></div>
+      <div class="field"><label>Units produced</label><input id="batch-qty" type="number" min="1" step="any" placeholder="e.g. 100"/></div>
+      <div class="field"><label>Notes <span class="hint">(optional)</span></label><input id="batch-notes" placeholder="Batch #, notes…"/></div>
+    </div>
+    <button class="btn btn-sm ${bb}" onclick="logBatch()"><i class="ti ti-plus"></i> Add to inventory</button>`;
+  }
+  const pwl=document.getElementById('prod-wu-list');
+  if(!B().products.length){ pwl.innerHTML='<p class="empty">No products added yet.</p>'; }
+  else{
+    let html='';
+    CATEGORIES.forEach(cat=>{
+      const prods=B().products.filter(p=>p.cat===cat);
+      if(!prods.length) return;
+      html+=`<div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px;padding-bottom:4px;border-bottom:0.5px solid var(--border)">${cat}</div>`;
+      prods.forEach(p=>{
+        const low=p.min>0&&p.qty<=p.min;
+        html+=`<div class="prod-wu-row">
+          <div style="flex:1"><div class="prod-wu-name">${p.name}${low?` <span class="badge badge-low" style="font-size:10px">Low</span>`:''}</div></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="number" class="wu-prod qty-input" data-id="${p.id}" value="${p.qty}" min="0" step="any" style="width:75px"/>
+            <span style="font-size:12px;color:var(--text2);min-width:30px">${p.unit}</span>
+          </div>
+        </div>`;
+      });
+    });
+    pwl.innerHTML=html;
+  }
+}
+
+function renderMaterials(){
+  const el=document.getElementById('materials-table');
+  if(!B().materials.length){ el.innerHTML='<p class="empty">No raw materials added yet.</p>'; return; }
+  el.innerHTML=`<table><thead><tr><th>Material</th><th>Supplier</th><th>In stock</th><th>Unit</th><th>Reorder point</th><th>Lead time</th><th>Status</th><th></th></tr></thead><tbody>${
+    B().materials.map(m=>{
+      const out=m.qty===0,low=m.min>0&&m.qty<=m.min;
+      const badge=out?'<span class="badge badge-low">Out of stock</span>':low?'<span class="badge badge-warn">Reorder now</span>':'<span class="badge badge-ok">OK</span>';
+      return `<tr>
+        <td style="font-weight:600">${m.name}</td>
+        <td style="color:var(--text2);font-size:12px">${m.supplier||'—'}</td>
+        <td><input type="number" class="tbl-input" value="${m.qty}" min="0" step="any" onchange="(function(v){const m=B().materials.find(m=>m.id===${m.id});if(m){m.qty=parseFloat(v)||0;saveAndSync();render();}})(this.value)"/></td>
+        <td>${m.unit}</td>
+        <td><input type="number" class="tbl-input" value="${m.min||''}" min="0" step="any" placeholder="—" onchange="(function(v){const m=B().materials.find(m=>m.id===${m.id});if(m){m.min=parseFloat(v)||0;saveAndSync();render();}})(this.value)"/></td>
+        <td>${m.lead?`<span class="lead-chip">${m.lead}d</span>`:'—'}</td>
+        <td>${badge}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="delMat(${m.id})"><i class="ti ti-trash"></i></button></td>
+      </tr>`;
+    }).join('')
+  }</tbody></table>`;
+}
+
+function renderProductsByCategory(){
+  const el=document.getElementById('products-by-category');
+  if(!B().products.length){ el.innerHTML='<p class="empty">No finished products added yet.</p>'; return; }
+  let html='';
+  CATEGORIES.forEach(cat=>{
+    const prods=B().products.filter(p=>p.cat===cat);
+    if(!prods.length) return;
+    html+=`<div class="cat-group">
+      <div class="cat-group-header">
+        <span>${cat}</span>
+        <span class="cat-count">${prods.length} product${prods.length>1?'s':''}</span>
+      </div>
+      <table><thead><tr><th>Product</th><th>SKU</th><th>QBO Link</th><th>In stock</th><th>Unit</th><th>Min stock</th><th>Delivery</th><th>Status</th><th></th></tr></thead><tbody>
+      ${prods.map(p=>{
+        const out=p.qty===0,low=p.min>0&&p.qty<=p.min;
+        const badge=out?'<span class="badge badge-low">Out of stock</span>':low?'<span class="badge badge-warn">Below min</span>':'<span class="badge badge-ok">Ready</span>';
+        const qboLink=p.qboItemId?`<span class="badge badge-qbo"><i class="ti ti-link" style="font-size:9px"></i> ${p.qboItemId}</span>`:'<span style="color:var(--text3);font-size:12px">—</span>';
+        return `<tr>
+          <td style="font-weight:600">${p.name}${p.notes?`<div style="font-size:11px;color:var(--text3)">${p.notes}</div>`:''}</td>
+          <td style="color:var(--text2);font-size:12px">${p.sku||'—'}</td>
+          <td>${qboLink}</td>
+          <td><input type="number" class="tbl-input" value="${p.qty}" min="0" step="any" onchange="(function(v){const p=B().products.find(p=>p.id===${p.id});if(p){p.qty=parseFloat(v)||0;saveAndSync();render();}})(this.value)"/></td>
+          <td>${p.unit}</td>
+          <td><input type="number" class="tbl-input" value="${p.min||''}" min="0" step="any" placeholder="—" onchange="(function(v){const p=B().products.find(p=>p.id===${p.id});if(p){p.min=parseFloat(v)||0;saveAndSync();render();}})(this.value)"/></td>
+          <td>${p.lead?`<span class="lead-chip">${p.lead}d</span>`:'—'}</td>
+          <td>${badge}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="delProd(${p.id})"><i class="ti ti-trash"></i></button></td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+
+function renderOrders(){
+  updateOrderSelect();
+  const pending=B().orders.filter(o=>!o.received);
+  const received=B().orders.filter(o=>o.received).slice().reverse();
+  const pel=document.getElementById('orders-pending');
+  if(!pel) return;
+  if(!pending.length){ pel.innerHTML='<p class="empty">No pending orders.</p>'; }
+  else{ pel.innerHTML=`<table><thead><tr><th>Material</th><th>Qty</th><th>Expected</th><th>Supplier</th><th>Ref #</th><th></th></tr></thead><tbody>${pending.map(o=>`<tr><td style="font-weight:600">${matName(o)}</td><td>${o.qty} ${matUnit(o)}</td><td>${o.date||'—'}</td><td>${o.supplier||'—'}</td><td style="font-size:12px;color:var(--text2)">${o.ref||'—'}</td><td style="display:flex;gap:6px"><button class="btn btn-sm btn-success" onclick="receiveOrder(${o.id})"><i class="ti ti-check"></i> Receive</button><button class="btn btn-sm btn-danger" onclick="delOrder(${o.id})"><i class="ti ti-trash"></i></button></td></tr>`).join('')}</tbody></table>`; }
+  const hel=document.getElementById('orders-history');
+  if(!received.length){ hel.innerHTML='<p class="empty">No received orders yet.</p>'; }
+  else{ hel.innerHTML=`<table><thead><tr><th>Material</th><th>Qty</th><th>Supplier</th><th>Received on</th></tr></thead><tbody>${received.slice(0,30).map(o=>`<tr><td style="font-weight:600">${matName(o)}</td><td>${o.qty} ${matUnit(o)}</td><td>${o.supplier||'—'}</td><td><span class="badge badge-ok">${o.receivedDate||'✓'}</span></td></tr>`).join('')}</tbody></table>`; }
+}
+
+// ── QBO FUNCTIONS ─────────────────────────────────────────────────────────────
+function saveServerUrl(){
+  const url=document.getElementById('qbo-server-url').value.trim().replace(/\/$/,'');
+  if(!url){ alert('Enter a server URL first.'); return; }
+  qboServerUrl=url;
+  localStorage.setItem('qbo_server_url',url);
+  updateWebhookUrl();
+  alert('Server URL saved! Now click "Connect QBO" to authorize.');
+}
+
+function updateWebhookUrl(){
+  const el=document.getElementById('qbo-webhook-url');
+  el.textContent=qboServerUrl?`${qboServerUrl}/webhook/qbo`:'Save your server URL first';
+}
+
+function copyWebhookUrl(){
+  const url=document.getElementById('qbo-webhook-url').textContent;
+  navigator.clipboard.writeText(url).then(()=>{ alert('Webhook URL copied!'); });
+}
+
+function qboConnect(){
+  if(!qboServerUrl){ alert('Save your Railway server URL first.'); return; }
+  window.open(`${qboServerUrl}/auth/connect`,'_blank');
+  addQboLog('info','Opened QuickBooks authorization — complete in new tab');
+}
+
+async function qboCheckStatus(){
+  if(!qboServerUrl){ showQboConnDetail('<p class="empty">No server URL set.</p>'); return; }
+  try{
+    const r=await fetch(`${qboServerUrl}/auth/status`);
+    const d=await r.json();
+    qboConnected=d.connected;
+    updateQboChip();
+    if(d.connected){
+      const exp=new Date(d.expiresAt);
+      const expired=d.expired;
+      showQboConnDetail(`
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span class="badge badge-ok"><i class="ti ti-circle-check"></i> Connected</span>
+          ${expired?'<span class="badge badge-low">Token expired</span>':''}
+        </div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7">
+          <div><strong>Realm ID:</strong> ${d.realmId}</div>
+          <div><strong>Token expires:</strong> ${exp.toLocaleString()}${expired?' — will auto-refresh on next invoice':''}</div>
+        </div>`);
+    } else {
+      showQboConnDetail('<p class="empty">Not connected. Click "Connect QBO" to authorize.</p>');
+    }
+  }catch(e){
+    qboConnected=false; updateQboChip();
+    showQboConnDetail(`<p class="empty" style="color:var(--text-danger)">Could not reach server: ${e.message}</p>`);
+  }
+}
+
+function showQboConnDetail(html){ document.getElementById('qbo-conn-detail').innerHTML=html; }
+
+function updateQboChip(){
+  const dot=document.getElementById('qbo-chip-dot');
+  const lbl=document.getElementById('qbo-chip-label');
+  dot.className='qbo-chip-dot'+(qboConnected?' connected':'');
+  lbl.textContent=qboConnected?'QBO: Connected':'QBO: Not connected';
+  // Update banner
+  const banner=document.getElementById('qbo-connect-banner');
+  const btn=document.getElementById('qbo-connect-btn');
+  if(qboConnected){
+    banner.style.background='var(--bg-success)';
+    banner.style.borderColor='rgba(59,109,17,.2)';
+    document.getElementById('qbo-banner-title').textContent='QuickBooks is connected ✓';
+    document.getElementById('qbo-banner-title').style.color='var(--text-success)';
+    document.getElementById('qbo-banner-sub').textContent='Paid invoices will automatically deduct from your finished products inventory via webhook.';
+    btn.style.display='none';
+  } else {
+    banner.style.background='';
+    banner.style.borderColor='';
+    document.getElementById('qbo-banner-title').textContent='Connect your Railway backend to QuickBooks';
+    document.getElementById('qbo-banner-title').style.color='';
+    document.getElementById('qbo-banner-sub').textContent='Enter your Railway server URL below, then authorize QuickBooks.';
+    btn.style.display='';
+  }
+}
+
+async function qboDisconnect(){
+  if(!qboServerUrl) return;
+  if(!confirm('Disconnect from QuickBooks?')) return;
+  try{
+    await fetch(`${qboServerUrl}/auth/disconnect`);
+    qboConnected=false; updateQboChip();
+    addQboLog('warn','Disconnected from QuickBooks');
+    showQboConnDetail('<p class="empty">Disconnected. Click "Connect QBO" to re-authorize.</p>');
+  }catch(e){ alert('Could not reach server.'); }
+}
+
+async function qboSyncInvoice(){
+  const id=document.getElementById('qbo-invoice-id').value.trim();
+  if(!id){ alert('Enter an invoice ID.'); return; }
+  if(!qboServerUrl){ alert('Set server URL first.'); return; }
+  showSyncResult('Syncing…','info');
+  try{
+    const r=await fetch(`${qboServerUrl}/webhook/manual-sync/${id}`,{method:'POST'});
+    const d=await r.json();
+    if(d.skipped){ showSyncResult(`Skipped: ${d.reason}`,'warn'); }
+    else if(d.error){ showSyncResult(`Error: ${d.error}`,'error'); }
+    else{
+      const lines=d.updated?.map(u=>`${u.name}: ${u.prevQty} → ${u.newQty}`).join(', ')||'—';
+      showSyncResult(`Invoice #${d.docNumber} synced. Deducted: ${lines}`,'ok');
+      addQboLog('ok',`Invoice #${d.docNumber} synced — ${d.linesProcessed} line items deducted`);
+      fetchBin(); // refresh inventory
+    }
+  }catch(e){ showSyncResult(`Network error: ${e.message}`,'error'); }
+}
+
+async function qboSyncAllPaid(){
+  const since=document.getElementById('qbo-since-date').value;
+  if(!qboServerUrl){ alert('Set server URL first.'); return; }
+  showSyncResult('Syncing all paid invoices…','info');
+  try{
+    const r=await fetch(`${qboServerUrl}/webhook/sync-paid-since`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({since})
+    });
+    const d=await r.json();
+    showSyncResult(`Processed ${d.processed} paid invoices`+(since?` since ${since}`:'')+'.','ok');
+    addQboLog('ok',`Bulk sync: ${d.processed} paid invoices processed`);
+    fetchBin();
+  }catch(e){ showSyncResult(`Network error: ${e.message}`,'error'); }
+}
+
+function showSyncResult(msg,type){
+  const el=document.getElementById('qbo-sync-result');
+  const colors={ok:'var(--text-success)',warn:'var(--text-warning)',error:'var(--text-danger)',info:'var(--text-info)'};
+  el.style.display='block';
+  el.innerHTML=`<span style="font-size:12px;color:${colors[type]||'var(--text2)'}">${msg}</span>`;
+}
+
+async function qboFetchProducts(){
+  if(!qboServerUrl){ alert('Set server URL first.'); return; }
+  const brand=document.getElementById('qbo-import-brand').value;
+  try{
+    const r=await fetch(`${qboServerUrl}/products/qbo`);
+    if(r.status===401){ alert('Not connected to QuickBooks. Connect first.'); return; }
+    const d=await r.json();
+    qboFetchedItems=d.items||[];
+    document.getElementById('qbo-item-count').textContent=qboFetchedItems.length;
+    renderQboItems();
+    document.getElementById('qbo-staging').style.display='block';
+    addQboLog('info',`Fetched ${qboFetchedItems.length} inventory items from QBO`);
+  }catch(e){ alert('Could not fetch from server: '+e.message); }
+}
+
+function renderQboItems(){
+  const catOpts=CATEGORIES.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('qbo-items-list').innerHTML=qboFetchedItems.map((item,i)=>{
+    const alreadyLinked=Object.values(state).some(brand=>
+      (brand.products||[]).some(p=>p.qboItemId===item.Id)
+    );
+    return `<div class="qbo-import-row">
+      <input type="checkbox" class="qbo-item-chk" data-idx="${i}" ${alreadyLinked?'':''}>
+      <div class="qbo-import-name">${item.Name}${alreadyLinked?` <span class="badge badge-ok" style="font-size:10px">Linked</span>`:''}<span>${item.Sku||''}</span></div>
+      <select class="qbo-item-cat" data-idx="${i}">
+        <option value="">Map to category…</option>${catOpts}
+      </select>
+      <div style="font-size:12px;color:var(--text3)">${item.Sku||'—'}</div>
+      <div style="font-size:13px;font-weight:600">${item.QtyOnHand||0}</div>
+    </div>`;
+  }).join('');
+}
+
+function qboToggleAll(checked){
+  document.querySelectorAll('.qbo-item-chk').forEach(cb=>cb.checked=checked);
+}
+
+async function qboImportSelected(){
+  if(!qboServerUrl){ alert('Set server URL first.'); return; }
+  const brand=document.getElementById('qbo-import-brand').value;
+  const items=[];
+  document.querySelectorAll('.qbo-item-chk').forEach(cb=>{
+    if(!cb.checked) return;
+    const i=parseInt(cb.dataset.idx);
+    const cat=document.querySelector(`.qbo-item-cat[data-idx="${i}"]`).value;
+    const item=qboFetchedItems[i];
+    if(!cat){ return; }
+    items.push({
+      qboId:item.Id, name:item.Name, sku:item.Sku||'',
+      category:cat, qty:item.QtyOnHand||0, unit:'units'
+    });
+  });
+  if(!items.length){ alert('Select at least one item and assign a category.'); return; }
+  try{
+    const r=await fetch(`${qboServerUrl}/products/import`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({brand,items})
+    });
+    const d=await r.json();
+    document.getElementById('qbo-import-result').style.display='block';
+    document.getElementById('qbo-import-result').innerHTML=
+      `<span class="badge badge-ok">${d.imported} imported</span>${d.skipped?` <span class="badge badge-warn">${d.skipped} skipped (invalid category)</span>`:''}`;
+    addQboLog('ok',`Imported ${d.imported} QBO products into ${brand} inventory`);
+    fetchBin();
+  }catch(e){ alert('Import failed: '+e.message); }
+}
+
+function qboFetchLog(){
+  renderQboLog();
+}
+
+function addQboLog(type,text){
+  const icons={ok:'ti-circle-check',warn:'ti-alert-triangle',error:'ti-circle-x',info:'ti-info-circle'};
+  const colors={ok:'var(--text-success)',warn:'var(--text-warning)',error:'var(--text-danger)',info:'var(--text-info)'};
+  qboActivityLog.unshift({
+    time:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+    type,text,icon:icons[type]||'ti-circle',color:colors[type]||'var(--text2)'
+  });
+  if(qboActivityLog.length>50) qboActivityLog.pop();
+  try{ localStorage.setItem('qbo_log',JSON.stringify(qboActivityLog)); }catch(e){}
+  renderQboLog();
+}
+
+function renderQboLog(){
+  const el=document.getElementById('qbo-log');
+  if(!qboActivityLog.length){
+    el.innerHTML='<div class="empty">No sync activity yet.</div>'; return;
+  }
+  el.innerHTML=qboActivityLog.map(e=>`
+    <div class="qbo-log-entry">
+      <span class="qbo-log-time">${e.time}</span>
+      <i class="ti ${e.icon} qbo-log-icon" style="color:${e.color}"></i>
+      <span class="qbo-log-text">${e.text}</span>
+    </div>`).join('');
+}
+
+function renderQBO(){
+  // Restore server URL field
+  if(qboServerUrl) document.getElementById('qbo-server-url').value=qboServerUrl;
+  updateWebhookUrl();
+  renderQboLog();
+  qboCheckStatus();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+loadLocal();
+render();
+fetchBin();
+setInterval(fetchBin, 60000);
+// Auto-check QBO status on load if URL is stored
+if(qboServerUrl) setTimeout(qboCheckStatus, 1500);
+</script>
+</body>
+</html>
