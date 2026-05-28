@@ -3,8 +3,11 @@ import { jsonbinService } from "./services/jsonbin.js";
 import { loadTokens } from "./routes/auth.js";
 
 const POLL_INTERVAL_MS = 30 * 1000;
-const LOOKBACK_MS = 24 * 60 * 60 * 1000;
 const JSONBIN_API = "https://api.jsonbin.io/v3";
+
+// Record the exact time the server started — only process invoices paid AFTER this
+const SERVER_START_TIME = new Date().toISOString().replace(/\.\d{3}Z$/, '');
+console.log(`[Poller] Will only process invoices paid after: ${SERVER_START_TIME}`);
 
 async function getProcessedInvoices() {
   try {
@@ -49,17 +52,14 @@ async function pollPaidInvoices() {
       return;
     }
 
-    const since = new Date(Date.now() - LOOKBACK_MS).toISOString().replace(/\.\d{3}Z$/, '');
-    console.log(`[Poller] Querying invoices since ${since}`);
-    
-    const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.LastUpdatedTime > '${since}'`);
+    // Only look at invoices updated since server started
+    const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.LastUpdatedTime > '${SERVER_START_TIME}'`);
     const invoices = data?.QueryResponse?.Invoice || [];
-    console.log(`[Poller] Found ${invoices.length} paid invoices`);
+    console.log(`[Poller] Found ${invoices.length} paid invoices since server start`);
 
     if (!invoices.length) return;
 
     const processed = await getProcessedInvoices();
-    console.log(`[Poller] Already processed: ${processed.size}`);
     let deducted = 0;
 
     for (const inv of invoices) {
@@ -90,7 +90,9 @@ async function pollPaidInvoices() {
       deducted++;
     }
 
-    console.log(`[Poller] Done — ${deducted} new invoices processed`);
+    if (deducted > 0) {
+      console.log(`[Poller] Done — ${deducted} new invoice(s) processed`);
+    }
   } catch (err) {
     console.error("[Poller] Error:", err.message);
   }
