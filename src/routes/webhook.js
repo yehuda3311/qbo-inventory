@@ -7,8 +7,25 @@ import express from "express";
 
 export const webhookRouter = Router();
 
+// In-memory log of webhook attempts
+const webhookLog = [];
+
+// View recent webhook attempts
+webhookRouter.get("/log", (req, res) => {
+  res.json({ count: webhookLog.length, entries: webhookLog.slice(-20) });
+});
+
 // QBO webhook receiver
 webhookRouter.post("/qbo", express.raw({ type: "application/json" }), async (req, res) => {
+  const entry = {
+    time: new Date().toISOString(),
+    signature: req.headers["intuit-signature"] || "none",
+    bodyPreview: req.body?.toString?.()?.slice(0, 200) || "empty",
+  };
+  webhookLog.push(entry);
+  console.log("Webhook received:", JSON.stringify(entry));
+
+  // Verify signature
   if (process.env.QBO_WEBHOOK_VERIFIER_TOKEN) {
     const signature = req.headers["intuit-signature"];
     const hash = crypto
@@ -16,7 +33,8 @@ webhookRouter.post("/qbo", express.raw({ type: "application/json" }), async (req
       .update(req.body)
       .digest("base64");
     if (hash !== signature) {
-      console.warn("Invalid webhook signature");
+      console.warn("Invalid signature. Expected:", hash, "Got:", signature);
+      entry.error = "Invalid signature";
       return res.status(401).json({ error: "Invalid signature" });
     }
   }
@@ -54,7 +72,7 @@ webhookRouter.post("/sync-paid-since", async (req, res) => {
     if (!stored?.qboTokens) {
       return res.status(401).json({ error: "Not authenticated with QuickBooks" });
     }
-    const where = since ? `WHERE TxnDate >= '${since}' AND PaymentMethodRef IS NOT NULL` : "";
+    const where = since ? `WHERE TxnDate >= '${since}'` : "";
     const data = await qboService.queryInvoices(stored, where);
     const invoices = data?.QueryResponse?.Invoice || [];
     const paid = invoices.filter(inv => inv.Balance === 0);
@@ -73,9 +91,9 @@ webhookRouter.post("/sync-paid-since", async (req, res) => {
 
 async function processWebhookEvent(event) {
   const entities = event?.eventNotifications?.[0]?.dataChangeEvent?.entities || [];
+  console.log("Processing entities:", JSON.stringify(entities));
   for (const entity of entities) {
     if (entity.name !== "Invoice") continue;
-    if (entity.operation !== "Update") continue;
     console.log(`Invoice update: ${entity.id}`);
     const stored = await loadTokens();
     if (!stored) { console.error("No stored QBO tokens"); return; }
@@ -100,12 +118,11 @@ async function syncInvoiceToInventory(stored, invoiceId) {
       itemId: l.SalesItemLineDetail?.ItemRef?.value,
       itemName: l.SalesItemLineDetail?.ItemRef?.name,
       qty: l.SalesItemLineDetail?.Qty || 0,
-      amount: l.Amount,
     }))
     .filter(l => l.itemId && l.qty > 0);
 
   if (!lines.length) {
-    return { skipped: true, reason: "No inventory line items on invoice" };
+    return { skipped: true, reason: "No line items on invoice" };
   }
 
   const result = await jsonbinService.deductSoldItems(lines);
