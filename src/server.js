@@ -8,33 +8,32 @@ import { productsRouter } from "./routes/products.js";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// CORS — allow requests from any local HTML file or browser
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "change-me-in-production",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: process.env.NODE_ENV === "production" },
-  })
-);
+app.use(session({
+  secret: process.env.SESSION_SECRET || "change-me-in-production",
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: process.env.NODE_ENV === "production" },
+}));
 
-// Routes
 app.use("/auth", authRouter);
 app.use("/webhook", webhookRouter);
 app.use("/inventory", inventoryRouter);
 app.use("/products", productsRouter);
 
-// Health check
 app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    connected: !!req.session?.qboTokens,
-    message: req.session?.qboTokens
-      ? "QuickBooks connected ✓"
-      : "Visit /auth/connect to link QuickBooks",
-  });
+  res.json({ status: "ok", message: "Kratomyx & Kavana QBO Sync Server" });
 });
 
 app.listen(PORT, () => {
