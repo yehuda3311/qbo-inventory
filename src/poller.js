@@ -5,8 +5,9 @@ import { loadTokens } from "./routes/auth.js";
 const POLL_INTERVAL_MS = 30 * 1000;
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
-const SERVER_START_TIME = new Date().toISOString().replace(/\.\d{3}Z$/, '');
-console.log(`[Poller] Will only process invoices created/paid after: ${SERVER_START_TIME}`);
+// Store start time as a simple date string QBO can compare
+const SERVER_START_DATE = new Date().toISOString().split('T')[0]; // just YYYY-MM-DD
+console.log(`[Poller] Will only process invoices created on or after: ${SERVER_START_DATE}`);
 
 async function getProcessedInvoices() {
   try {
@@ -51,10 +52,10 @@ async function pollPaidInvoices() {
       return;
     }
 
-    // Query by CreateTime so we catch $0 invoices that are paid at creation
-    const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND MetaData.CreateTime > '${SERVER_START_TIME}'`);
+    // Query by TxnDate (transaction date) which is just YYYY-MM-DD — simple and reliable
+    const data = await qboService.queryInvoices(stored, `WHERE Balance = '0' AND TxnDate >= '${SERVER_START_DATE}'`);
     const invoices = data?.QueryResponse?.Invoice || [];
-    console.log(`[Poller] Found ${invoices.length} paid invoices since server start`);
+    console.log(`[Poller] Found ${invoices.length} paid invoices for today`);
 
     if (!invoices.length) return;
 
