@@ -8,6 +8,12 @@ import { productsRouter } from "./routes/products.js";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Log every incoming request before anything else
+app.use((req, res, next) => {
+  console.log(`>>> ${new Date().toISOString()} ${req.method} ${req.url}`);
+  next();
+});
+
 // CORS
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -17,7 +23,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Parse JSON for all routes EXCEPT /webhook/qbo (needs raw body)
+// Parse JSON for all routes EXCEPT /webhook/qbo
 app.use((req, res, next) => {
   if (req.path === "/webhook/qbo") return next();
   express.json()(req, res, next);
