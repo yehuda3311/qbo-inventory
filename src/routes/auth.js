@@ -8,16 +8,11 @@ const JSONBIN_API = "https://api.jsonbin.io/v3";
 async function saveTokens(tokens, realmId) {
   const binId = process.env.JSONBIN_BIN_ID;
   const apiKey = process.env.JSONBIN_API_KEY;
-  
-  // Read current bin data first
   const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
     headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
   });
   const current = await r.json();
-  
-  // Merge tokens into existing data
   const updated = { ...current, qboTokens: tokens, realmId };
-  
   await fetch(`${JSONBIN_API}/b/${binId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
@@ -34,6 +29,25 @@ export async function loadTokens() {
     });
     const data = await r.json();
     if (!data?.qboTokens) return null;
+
+    // Auto-refresh if access token is expired or about to expire
+    const { created_at, expires_in, refresh_token } = data.qboTokens;
+    const isExpired = Date.now() > created_at + (expires_in * 1000) - 120000; // 2min buffer
+
+    if (isExpired) {
+      console.log("[Auth] Access token expired — auto-refreshing...");
+      try {
+        const newTokens = await qboService.refreshTokens(refresh_token);
+        await saveTokens(newTokens, data.realmId);
+        console.log("[Auth] Token refreshed successfully");
+        return { qboTokens: newTokens, realmId: data.realmId };
+      } catch (err) {
+        console.error("[Auth] Token refresh failed:", err.message);
+        // Return existing tokens anyway and let the API call fail naturally
+        return { qboTokens: data.qboTokens, realmId: data.realmId };
+      }
+    }
+
     return { qboTokens: data.qboTokens, realmId: data.realmId };
   } catch { return null; }
 }
@@ -41,15 +55,9 @@ export async function loadTokens() {
 authRouter.get("/connect", (req, res) => {
   const clientId = process.env.QBO_CLIENT_ID;
   const redirectUri = process.env.QBO_REDIRECT_URI;
-
   if (!clientId || !redirectUri) {
-    return res.status(500).json({
-      error: "Missing env vars",
-      clientId: clientId ? "set" : "MISSING",
-      redirectUri: redirectUri ? "set" : "MISSING"
-    });
+    return res.status(500).json({ error: "Missing env vars", clientId: clientId ? "set" : "MISSING", redirectUri: redirectUri ? "set" : "MISSING" });
   }
-
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: "code",
@@ -57,20 +65,16 @@ authRouter.get("/connect", (req, res) => {
     redirect_uri: redirectUri,
     state: Math.random().toString(36).substring(7),
   });
-
   res.redirect(`https://appcenter.intuit.com/connect/oauth2?${params}`);
 });
 
 authRouter.get("/callback", async (req, res) => {
   const { code, realmId, error } = req.query;
-
   if (error) return res.status(400).json({ error: `QuickBooks auth error: ${error}` });
   if (!code || !realmId) return res.status(400).json({ error: "Missing code or realmId" });
-
   try {
     const tokens = await qboService.exchangeCodeForTokens(code, realmId);
     await saveTokens(tokens, realmId);
-
     res.json({
       success: true,
       message: "QuickBooks connected successfully! ✓",
