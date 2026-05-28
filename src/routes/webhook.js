@@ -3,50 +3,68 @@ import crypto from "crypto";
 import { qboService } from "../services/qbo.js";
 import { jsonbinService } from "../services/jsonbin.js";
 import { loadTokens } from "./auth.js";
-import express from "express";
 
 export const webhookRouter = Router();
 
-// In-memory log of webhook attempts
 const webhookLog = [];
 
-// View recent webhook attempts
 webhookRouter.get("/log", (req, res) => {
   res.json({ count: webhookLog.length, entries: webhookLog.slice(-20) });
 });
 
-// QBO webhook receiver
-webhookRouter.post("/qbo", express.raw({ type: "application/json" }), async (req, res) => {
-  const entry = {
-    time: new Date().toISOString(),
-    signature: req.headers["intuit-signature"] || "none",
-    bodyPreview: req.body?.toString?.()?.slice(0, 200) || "empty",
-  };
-  webhookLog.push(entry);
-  console.log("Webhook received:", JSON.stringify(entry));
-
-  // Verify signature
-  if (process.env.QBO_WEBHOOK_VERIFIER_TOKEN) {
-    const signature = req.headers["intuit-signature"];
-    const hash = crypto
-      .createHmac("sha256", process.env.QBO_WEBHOOK_VERIFIER_TOKEN)
-      .update(req.body)
-      .digest("base64");
-    if (hash !== signature) {
-      console.warn("Invalid signature. Expected:", hash, "Got:", signature);
-      entry.error = "Invalid signature";
-      return res.status(401).json({ error: "Invalid signature" });
-    }
+// Use a general middleware to log ALL incoming requests to /webhook
+webhookRouter.use((req, res, next) => {
+  if (req.method === "POST") {
+    const entry = { time: new Date().toISOString(), method: req.method, path: req.path, headers: req.headers };
+    webhookLog.push(entry);
+    console.log("Webhook POST received:", JSON.stringify(entry));
   }
+  next();
+});
 
-  let event;
-  try { event = JSON.parse(req.body.toString()); }
-  catch { return res.status(400).json({ error: "Invalid JSON" }); }
+// QBO webhook receiver — read raw body manually
+webhookRouter.post("/qbo", async (req, res) => {
+  // Collect raw body
+  const chunks = [];
+  req.on("data", chunk => chunks.push(chunk));
+  req.on("end", async () => {
+    const rawBody = Buffer.concat(chunks);
+    const bodyStr = rawBody.toString();
 
-  res.status(200).json({ received: true });
+    // Log it
+    const entry = {
+      time: new Date().toISOString(),
+      signature: req.headers["intuit-signature"] || "none",
+      body: bodyStr.slice(0, 500),
+    };
+    webhookLog.push(entry);
+    console.log("QBO webhook body:", bodyStr.slice(0, 500));
 
-  try { await processWebhookEvent(event); }
-  catch (err) { console.error("Webhook processing error:", err); }
+    // Verify signature
+    if (process.env.QBO_WEBHOOK_VERIFIER_TOKEN) {
+      const signature = req.headers["intuit-signature"];
+      const hash = crypto
+        .createHmac("sha256", process.env.QBO_WEBHOOK_VERIFIER_TOKEN)
+        .update(rawBody)
+        .digest("base64");
+      if (hash !== signature) {
+        console.warn("Invalid signature. Expected:", hash, "Got:", signature);
+        entry.error = "Invalid signature";
+        return res.status(401).json({ error: "Invalid signature" });
+      }
+    }
+
+    let event;
+    try { event = JSON.parse(bodyStr); }
+    catch (e) { return res.status(400).json({ error: "Invalid JSON" }); }
+
+    // Respond immediately
+    res.status(200).json({ received: true });
+
+    // Process async
+    try { await processWebhookEvent(event); }
+    catch (err) { console.error("Webhook processing error:", err); }
+  });
 });
 
 // Manual sync by invoice ID
@@ -64,7 +82,7 @@ webhookRouter.post("/manual-sync/:invoiceId", async (req, res) => {
   }
 });
 
-// Bulk sync all paid invoices since a date
+// Bulk sync
 webhookRouter.post("/sync-paid-since", async (req, res) => {
   const { since } = req.body;
   try {
@@ -109,8 +127,6 @@ async function syncInvoiceToInventory(stored, invoiceId) {
   if (invoice.Balance !== 0) {
     return { skipped: true, reason: `Balance is ${invoice.Balance}, not fully paid` };
   }
-
-  console.log(`Invoice ${invoice.DocNumber} is PAID — deducting inventory`);
 
   const lines = (invoice.Line || [])
     .filter(l => l.DetailType === "SalesItemLineDetail")
