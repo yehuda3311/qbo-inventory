@@ -9,16 +9,11 @@ function getBinConfig() {
 export const jsonbinService = {
   async getRawData() {
     const { binId, apiKey, baseUrl } = getBinConfig();
-    // Add cache-busting timestamp to prevent stale reads
-    const ts = Date.now();
     const res = await fetch(`${baseUrl}/b/${binId}/latest`, {
-      headers: { 
-        "X-Master-Key": apiKey, 
-        "X-Bin-Meta": "false",
-        "Cache-Control": "no-cache, no-store",
-        "Pragma": "no-cache"
-      },
-      cache: "no-store"
+      headers: {
+        "X-Master-Key": apiKey,
+        "X-Bin-Meta": "false"
+      }
     });
     if (!res.ok) throw new Error(`JSONBin read failed: ${res.status}`);
     const data = await res.json();
@@ -31,10 +26,9 @@ export const jsonbinService = {
     const { binId, apiKey, baseUrl } = getBinConfig();
     const res = await fetch(`${baseUrl}/b/${binId}`, {
       method: "PUT",
-      headers: { 
-        "Content-Type": "application/json", 
-        "X-Master-Key": apiKey,
-        "Cache-Control": "no-cache"
+      headers: {
+        "Content-Type": "application/json",
+        "X-Master-Key": apiKey
       },
       body: JSON.stringify(data),
     });
