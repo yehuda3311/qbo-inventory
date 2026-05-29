@@ -11,7 +11,7 @@ export const jsonbinService = {
     const { binId, apiKey, baseUrl } = getBinConfig();
     // Add cache-busting timestamp to prevent stale reads
     const ts = Date.now();
-    const res = await fetch(`${baseUrl}/b/${binId}?t=${ts}`, {
+    const res = await fetch(`${baseUrl}/b/${binId}/latest`, {
       headers: { 
         "X-Master-Key": apiKey, 
         "X-Bin-Meta": "false",
