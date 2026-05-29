@@ -9,7 +9,6 @@ import { startPoller } from "./poller.js";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -20,9 +19,8 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
 app.use(session({
-  secret: process.env.SESSION_SECRET || "change-me-in-production",
+  secret: process.env.SESSION_SECRET || "kk-secret-2024",
   resave: false,
   saveUninitialized: false,
   cookie: { secure: process.env.NODE_ENV === "production" },
@@ -39,6 +37,5 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
-  // Start polling for paid invoices every 5 minutes
   startPoller();
 });
