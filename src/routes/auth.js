@@ -5,49 +5,47 @@ export const authRouter = Router();
 
 const JSONBIN_API = "https://api.jsonbin.io/v3";
 
-async function saveTokens(tokens, realmId) {
-  const binId = process.env.JSONBIN_BIN_ID;
-  const apiKey = process.env.JSONBIN_API_KEY;
-  const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
-    headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
+async function getBin() {
+  const r = await fetch(`${JSONBIN_API}/b/${process.env.JSONBIN_BIN_ID}/latest`, {
+    headers: { "X-Master-Key": process.env.JSONBIN_API_KEY, "X-Bin-Meta": "false" }
   });
-  const current = await r.json();
-  const updated = { ...current, qboTokens: tokens, realmId };
-  await fetch(`${JSONBIN_API}/b/${binId}`, {
+  if (!r.ok) throw new Error(`JSONBin read failed: ${r.status}`);
+  return r.json();
+}
+
+async function putBin(data) {
+  const r = await fetch(`${JSONBIN_API}/b/${process.env.JSONBIN_BIN_ID}`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
-    body: JSON.stringify(updated)
+    headers: { "Content-Type": "application/json", "X-Master-Key": process.env.JSONBIN_API_KEY },
+    body: JSON.stringify(data)
   });
+  if (!r.ok) throw new Error(`JSONBin write failed: ${r.status}`);
+  return r.json();
+}
+
+async function saveTokens(tokens, realmId) {
+  const current = await getBin();
+  await putBin({ ...current, qboTokens: tokens, realmId });
 }
 
 export async function loadTokens() {
-  const binId = process.env.JSONBIN_BIN_ID;
-  const apiKey = process.env.JSONBIN_API_KEY;
   try {
-    const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
-      headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
-    });
-    const data = await r.json();
+    const data = await getBin();
     if (!data?.qboTokens) return null;
-
-    // Auto-refresh if access token is expired or about to expire
     const { created_at, expires_in, refresh_token } = data.qboTokens;
-    const isExpired = Date.now() > created_at + (expires_in * 1000) - 120000; // 2min buffer
-
+    const isExpired = Date.now() > created_at + (expires_in * 1000) - 120000;
     if (isExpired) {
-      console.log("[Auth] Access token expired — auto-refreshing...");
+      console.log("[Auth] Token expired — refreshing...");
       try {
         const newTokens = await qboService.refreshTokens(refresh_token);
         await saveTokens(newTokens, data.realmId);
-        console.log("[Auth] Token refreshed successfully");
+        console.log("[Auth] Token refreshed ✓");
         return { qboTokens: newTokens, realmId: data.realmId };
       } catch (err) {
-        console.error("[Auth] Token refresh failed:", err.message);
-        // Return existing tokens anyway and let the API call fail naturally
+        console.error("[Auth] Refresh failed:", err.message);
         return { qboTokens: data.qboTokens, realmId: data.realmId };
       }
     }
-
     return { qboTokens: data.qboTokens, realmId: data.realmId };
   } catch { return null; }
 }
@@ -55,70 +53,43 @@ export async function loadTokens() {
 authRouter.get("/connect", (req, res) => {
   const clientId = process.env.QBO_CLIENT_ID;
   const redirectUri = process.env.QBO_REDIRECT_URI;
-  if (!clientId || !redirectUri) {
-    return res.status(500).json({ error: "Missing env vars", clientId: clientId ? "set" : "MISSING", redirectUri: redirectUri ? "set" : "MISSING" });
-  }
+  if (!clientId || !redirectUri) return res.status(500).json({ error: "Missing env vars" });
   const params = new URLSearchParams({
-    client_id: clientId,
-    response_type: "code",
+    client_id: clientId, response_type: "code",
     scope: "com.intuit.quickbooks.accounting",
-    redirect_uri: redirectUri,
-    state: Math.random().toString(36).substring(7),
+    redirect_uri: redirectUri, state: Math.random().toString(36).substring(7),
   });
   res.redirect(`https://appcenter.intuit.com/connect/oauth2?${params}`);
 });
 
 authRouter.get("/callback", async (req, res) => {
   const { code, realmId, error } = req.query;
-  if (error) return res.status(400).json({ error: `QuickBooks auth error: ${error}` });
+  if (error) return res.status(400).json({ error });
   if (!code || !realmId) return res.status(400).json({ error: "Missing code or realmId" });
   try {
     const tokens = await qboService.exchangeCodeForTokens(code, realmId);
     await saveTokens(tokens, realmId);
-    res.json({
-      success: true,
-      message: "QuickBooks connected successfully! ✓",
-      realmId,
-      expiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-    });
+    res.json({ success: true, message: "QuickBooks connected successfully! ✓", realmId,
+      expiresAt: new Date(Date.now() + tokens.expires_in * 1000).toISOString() });
   } catch (err) {
-    console.error("OAuth callback error:", err);
-    res.status(500).json({ error: "Failed to exchange code for tokens", details: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
 authRouter.get("/status", async (req, res) => {
   const stored = await loadTokens();
-  if (!stored?.qboTokens) {
-    return res.json({ connected: false, message: "Not connected. Visit /auth/connect" });
-  }
-  const { created_at, expires_in } = stored.qboTokens;
-  const expiresAt = new Date(created_at + expires_in * 1000);
-  res.json({
-    connected: true,
-    realmId: stored.realmId,
-    expiresAt: expiresAt.toISOString(),
-    expired: expiresAt < new Date(),
-  });
+  if (!stored?.qboTokens) return res.json({ connected: false });
+  const expiresAt = new Date(stored.qboTokens.created_at + stored.qboTokens.expires_in * 1000);
+  res.json({ connected: true, realmId: stored.realmId, expiresAt: expiresAt.toISOString(), expired: expiresAt < new Date() });
 });
 
 authRouter.get("/disconnect", async (req, res) => {
   try {
-    const binId = process.env.JSONBIN_BIN_ID;
-    const apiKey = process.env.JSONBIN_API_KEY;
-    const r = await fetch(`${JSONBIN_API}/b/${binId}/latest`, {
-      headers: { "X-Master-Key": apiKey, "X-Bin-Meta": "false" }
-    });
-    const current = await r.json();
-    delete current.qboTokens;
-    delete current.realmId;
-    await fetch(`${JSONBIN_API}/b/${binId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", "X-Master-Key": apiKey },
-      body: JSON.stringify(current)
-    });
+    const current = await getBin();
+    delete current.qboTokens; delete current.realmId;
+    await putBin(current);
   } catch {}
-  res.json({ success: true, message: "Disconnected from QuickBooks" });
+  res.json({ success: true });
 });
 
 authRouter.get("/debug", (req, res) => {
